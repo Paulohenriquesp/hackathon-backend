@@ -1,0 +1,21 @@
+# Dependências
+node_modules/
+
+# Build e compilação
+dist/
+build/
+
+# Logs
+logs/
+*.log
+
+# Env
+.env
+.env.local
+
+# Uploads temporários
+uploads/
+
+# IDE / SO
+.vscode/
+.DS_Store
