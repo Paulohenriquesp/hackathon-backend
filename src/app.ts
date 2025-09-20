@@ -4,6 +4,8 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import path from 'path';
 
+// Import tipos personalizados
+
 import authRoutes from './routes/auth';
 import materialsRoutes from './routes/materials';
 import env from './config/env';

@@ -10,7 +10,7 @@ export const validateBody = (schema: z.ZodSchema) => {
       if (error instanceof z.ZodError) {
         return res.status(400).json({
           error: 'Dados inválidos',
-          details: error.errors.map(err => ({
+          details: (error as any).errors.map((err: any) => ({
             field: err.path.join('.'),
             message: err.message
           }))
@@ -24,13 +24,13 @@ export const validateBody = (schema: z.ZodSchema) => {
 export const validateQuery = (schema: z.ZodSchema) => {
   return (req: Request, res: Response, next: NextFunction) => {
     try {
-      req.query = schema.parse(req.query);
+      req.query = schema.parse(req.query) as any;
       next();
     } catch (error) {
       if (error instanceof z.ZodError) {
         return res.status(400).json({
           error: 'Parâmetros inválidos',
-          details: error.errors.map(err => ({
+          details: (error as any).errors.map((err: any) => ({
             field: err.path.join('.'),
             message: err.message
           }))

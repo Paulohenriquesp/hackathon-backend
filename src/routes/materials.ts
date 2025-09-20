@@ -5,7 +5,9 @@ import {
   createMaterial,
   getMaterials,
   getMaterialById,
-  likeMaterial
+  rateMaterial,
+  updateMaterial,
+  deleteMaterial
 } from '../controllers/materialsController';
 
 const router = Router();
@@ -13,6 +15,8 @@ const router = Router();
 router.post('/', authenticateToken, upload.single('file'), createMaterial);
 router.get('/', getMaterials);
 router.get('/:id', getMaterialById);
-router.post('/:id/like', authenticateToken, likeMaterial);
+router.put('/:id', authenticateToken, updateMaterial);
+router.delete('/:id', authenticateToken, deleteMaterial);
+router.post('/:id/rate', authenticateToken, rateMaterial);
 
 export default router;

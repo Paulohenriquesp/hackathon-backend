@@ -1,39 +1,66 @@
 import { Request, Response } from 'express';
 import prisma from '../database';
-import { ResourceType } from '@prisma/client';
+import { MaterialType, Difficulty } from '@prisma/client';
 
-export const createMaterial = async (req: Request, res: Response) => {
+export const createMaterial = async (req: any, res: Response) => {
   try {
-    const { title, description, subject, gradeLevel, type, content } = req.body;
+    const { 
+      title, 
+      description, 
+      discipline, 
+      grade, 
+      materialType, 
+      subTopic, 
+      difficulty, 
+      estimatedDuration, 
+      tags 
+    } = req.body;
     const authorId = req.user?.id;
     const file = req.file;
 
     if (!authorId) {
-      return res.status(401).json({ error: 'Usuário não autenticado' });
+      return res.status(401).json({ 
+        success: false,
+        error: 'Usuário não autenticado' 
+      });
     }
 
-    if (!title || !description || !subject || !gradeLevel) {
+    if (!title || !description || !discipline || !grade) {
       return res.status(400).json({ 
+        success: false,
         error: 'Título, descrição, disciplina e série são obrigatórios' 
       });
     }
 
-    const validTypes = Object.values(ResourceType);
-    if (type && !validTypes.includes(type)) {
+    const validTypes = Object.values(MaterialType);
+    if (materialType && !validTypes.includes(materialType)) {
       return res.status(400).json({ 
-        error: 'Tipo de recurso inválido' 
+        success: false,
+        error: 'Tipo de material inválido' 
       });
     }
 
-    const material = await prisma.resource.create({
+    const validDifficulties = Object.values(Difficulty);
+    if (difficulty && !validDifficulties.includes(difficulty)) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Dificuldade inválida' 
+      });
+    }
+
+    const material = await prisma.material.create({
       data: {
         title,
         description,
-        content: content || '',
-        subject,
-        gradeLevel,
-        type: type || ResourceType.DOCUMENT,
+        discipline,
+        grade,
+        materialType: materialType || MaterialType.DOCUMENT,
+        subTopic,
+        difficulty: difficulty || Difficulty.MEDIUM,
+        estimatedDuration: estimatedDuration ? parseInt(estimatedDuration) : null,
         fileUrl: file ? `/uploads/${file.filename}` : null,
+        fileName: file ? file.originalname : null,
+        tags: Array.isArray(tags) ? tags : [],
         authorId
       },
       include: {
@@ -41,54 +68,97 @@ export const createMaterial = async (req: Request, res: Response) => {
           select: {
             id: true,
             name: true,
-            email: true
+            email: true,
+            school: true
           }
         },
         _count: {
           select: {
-            likes: true,
-            reviews: true
+            ratings: true
           }
         }
       }
     });
 
     res.status(201).json({
+      success: true,
       message: 'Material criado com sucesso',
-      material
+      data: material
     });
   } catch (error) {
     console.error('Erro ao criar material:', error);
-    res.status(500).json({ error: 'Erro interno do servidor' });
+    res.status(500).json({ 
+      success: false,
+      error: 'Erro interno do servidor' 
+    });
   }
 };
 
 export const getMaterials = async (req: Request, res: Response) => {
   try {
-    const { subject, gradeLevel, page = 1, limit = 10 } = req.query;
+    const { 
+      discipline, 
+      grade, 
+      materialType,
+      difficulty,
+      tags,
+      search,
+      page = 1, 
+      limit = 10 
+    } = req.query;
     
     const skip = (Number(page) - 1) * Number(limit);
     
-    const where: any = {
-      isPublic: true
-    };
+    const where: any = {};
 
-    if (subject) {
-      where.subject = {
-        contains: subject as string,
+    if (discipline) {
+      where.discipline = {
+        contains: discipline as string,
         mode: 'insensitive'
       };
     }
 
-    if (gradeLevel) {
-      where.gradeLevel = {
-        contains: gradeLevel as string,
+    if (grade) {
+      where.grade = {
+        contains: grade as string,
         mode: 'insensitive'
       };
+    }
+
+    if (materialType) {
+      where.materialType = materialType;
+    }
+
+    if (difficulty) {
+      where.difficulty = difficulty;
+    }
+
+    if (tags) {
+      const tagArray = Array.isArray(tags) ? tags : [tags];
+      where.tags = {
+        hasSome: tagArray
+      };
+    }
+
+    if (search) {
+      where.OR = [
+        {
+          title: {
+            contains: search as string,
+            mode: 'insensitive'
+          }
+        },
+        {
+          description: {
+            contains: search as string,
+            mode: 'insensitive'
+          }
+        }
+      ];
     }
 
     const [materials, total] = await Promise.all([
-      prisma.resource.findMany({
+      prisma.material.findMany({
         where,
         skip,
         take: Number(limit),
@@ -100,32 +170,37 @@ export const getMaterials = async (req: Request, res: Response) => {
             select: {
               id: true,
               name: true,
-              email: true
+              school: true
             }
           },
           _count: {
             select: {
-              likes: true,
-              reviews: true
+              ratings: true
             }
           }
         }
       }),
-      prisma.resource.count({ where })
+      prisma.material.count({ where })
     ]);
 
     res.json({
-      materials,
-      pagination: {
-        page: Number(page),
-        limit: Number(limit),
-        total,
-        pages: Math.ceil(total / Number(limit))
+      success: true,
+      data: {
+        materials,
+        pagination: {
+          page: Number(page),
+          limit: Number(limit),
+          total,
+          pages: Math.ceil(total / Number(limit))
+        }
       }
     });
   } catch (error) {
     console.error('Erro ao buscar materiais:', error);
-    res.status(500).json({ error: 'Erro interno do servidor' });
+    res.status(500).json({ 
+      success: false,
+      error: 'Erro interno do servidor' 
+    });
   }
 };
 
@@ -133,17 +208,18 @@ export const getMaterialById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
-    const material = await prisma.resource.findUnique({
+    const material = await prisma.material.findUnique({
       where: { id },
       include: {
         author: {
           select: {
             id: true,
             name: true,
-            email: true
+            email: true,
+            school: true
           }
         },
-        reviews: {
+        ratings: {
           include: {
             user: {
               select: {
@@ -158,92 +234,252 @@ export const getMaterialById = async (req: Request, res: Response) => {
         },
         _count: {
           select: {
-            likes: true,
-            reviews: true
+            ratings: true
           }
         }
       }
     });
 
     if (!material) {
-      return res.status(404).json({ error: 'Material não encontrado' });
+      return res.status(404).json({ 
+        success: false,
+        error: 'Material não encontrado' 
+      });
     }
 
-    if (!material.isPublic && material.authorId !== req.user?.id) {
-      return res.status(403).json({ error: 'Acesso negado' });
-    }
+    // Increment download count
+    await prisma.material.update({
+      where: { id },
+      data: {
+        downloadCount: {
+          increment: 1
+        }
+      }
+    });
 
-    res.json({ material });
+    res.json({ 
+      success: true,
+      data: material 
+    });
   } catch (error) {
     console.error('Erro ao buscar material:', error);
-    res.status(500).json({ error: 'Erro interno do servidor' });
+    res.status(500).json({ 
+      success: false,
+      error: 'Erro interno do servidor' 
+    });
   }
 };
 
-export const likeMaterial = async (req: Request, res: Response) => {
+export const rateMaterial = async (req: any, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { rating, comment } = req.body;
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ 
+        success: false,
+        error: 'Usuário não autenticado' 
+      });
+    }
+
+    if (!rating || rating < 1 || rating > 5) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Rating deve ser entre 1 e 5' 
+      });
+    }
+
+    const material = await prisma.material.findUnique({
+      where: { id }
+    });
+
+    if (!material) {
+      return res.status(404).json({ 
+        success: false,
+        error: 'Material não encontrado' 
+      });
+    }
+
+    const existingRating = await prisma.rating.findUnique({
+      where: {
+        materialId_userId: {
+          materialId: id,
+          userId
+        }
+      }
+    });
+
+    let result;
+    if (existingRating) {
+      result = await prisma.rating.update({
+        where: { id: existingRating.id },
+        data: { rating, comment },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true
+            }
+          }
+        }
+      });
+    } else {
+      result = await prisma.rating.create({
+        data: {
+          materialId: id,
+          userId,
+          rating,
+          comment
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true
+            }
+          }
+        }
+      });
+    }
+
+    // Update material's average rating
+    const ratings = await prisma.rating.findMany({
+      where: { materialId: id },
+      select: { rating: true }
+    });
+
+    const avgRating = ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length;
+    
+    await prisma.material.update({
+      where: { id },
+      data: {
+        avgRating,
+        totalRatings: ratings.length
+      }
+    });
+
+    res.json({ 
+      success: true,
+      message: existingRating ? 'Avaliação atualizada com sucesso' : 'Material avaliado com sucesso',
+      data: result 
+    });
+  } catch (error) {
+    console.error('Erro ao avaliar material:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Erro interno do servidor' 
+    });
+  }
+};
+
+export const updateMaterial = async (req: any, res: Response) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user?.id;
+    const updateData = req.body;
+
+    if (!userId) {
+      return res.status(401).json({ 
+        success: false,
+        error: 'Usuário não autenticado' 
+      });
+    }
+
+    const material = await prisma.material.findUnique({
+      where: { id }
+    });
+
+    if (!material) {
+      return res.status(404).json({ 
+        success: false,
+        error: 'Material não encontrado' 
+      });
+    }
+
+    if (material.authorId !== userId) {
+      return res.status(403).json({ 
+        success: false,
+        error: 'Não autorizado a editar este material' 
+      });
+    }
+
+    const updatedMaterial = await prisma.material.update({
+      where: { id },
+      data: updateData,
+      include: {
+        author: {
+          select: {
+            id: true,
+            name: true,
+            school: true
+          }
+        },
+        _count: {
+          select: {
+            ratings: true
+          }
+        }
+      }
+    });
+
+    res.json({ 
+      success: true,
+      message: 'Material atualizado com sucesso',
+      data: updatedMaterial 
+    });
+  } catch (error) {
+    console.error('Erro ao atualizar material:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Erro interno do servidor' 
+    });
+  }
+};
+
+export const deleteMaterial = async (req: any, res: Response) => {
   try {
     const { id } = req.params;
     const userId = req.user?.id;
 
     if (!userId) {
-      return res.status(401).json({ error: 'Usuário não autenticado' });
+      return res.status(401).json({ 
+        success: false,
+        error: 'Usuário não autenticado' 
+      });
     }
 
-    const material = await prisma.resource.findUnique({
+    const material = await prisma.material.findUnique({
       where: { id }
     });
 
     if (!material) {
-      return res.status(404).json({ error: 'Material não encontrado' });
+      return res.status(404).json({ 
+        success: false,
+        error: 'Material não encontrado' 
+      });
     }
 
-    const existingLike = await prisma.like.findUnique({
-      where: {
-        userId_resourceId: {
-          userId,
-          resourceId: id
-        }
-      }
+    if (material.authorId !== userId) {
+      return res.status(403).json({ 
+        success: false,
+        error: 'Não autorizado a deletar este material' 
+      });
+    }
+
+    await prisma.material.delete({
+      where: { id }
     });
 
-    if (existingLike) {
-      await prisma.$transaction([
-        prisma.like.delete({
-          where: { id: existingLike.id }
-        }),
-        prisma.resource.update({
-          where: { id },
-          data: {
-            likesCount: {
-              decrement: 1
-            }
-          }
-        })
-      ]);
-
-      res.json({ message: 'Like removido com sucesso', liked: false });
-    } else {
-      await prisma.$transaction([
-        prisma.like.create({
-          data: {
-            userId,
-            resourceId: id
-          }
-        }),
-        prisma.resource.update({
-          where: { id },
-          data: {
-            likesCount: {
-              increment: 1
-            }
-          }
-        })
-      ]);
-
-      res.json({ message: 'Material curtido com sucesso', liked: true });
-    }
+    res.json({ 
+      success: true,
+      message: 'Material deletado com sucesso'
+    });
   } catch (error) {
-    console.error('Erro ao curtir material:', error);
-    res.status(500).json({ error: 'Erro interno do servidor' });
+    console.error('Erro ao deletar material:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Erro interno do servidor' 
+    });
   }
 };

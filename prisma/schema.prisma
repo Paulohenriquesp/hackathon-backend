@@ -14,84 +14,76 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String
-  password  String
-  role      UserRole @default(TEACHER)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id             String   @id @default(cuid())
+  name           String
+  email          String   @unique
+  password       String
+  school         String?
+  materialsCount Int      @default(0)
+  createdAt      DateTime @default(now())
 
-  resources Resource[]
-  reviews   Review[]
-  likes     Like[]
+  materials Material[]
+  ratings   Rating[]
 
   @@map("users")
 }
 
-model Resource {
-  id          String     @id @default(cuid())
-  title       String
-  description String
-  content     String
-  type        ResourceType
-  subject     String
-  gradeLevel  String
-  tags        String[]
-  fileUrl     String?
-  likesCount  Int        @default(0)
-  isPublic    Boolean    @default(true)
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+model Material {
+  id                String       @id @default(cuid())
+  title             String
+  description       String
+  discipline        String
+  grade             String
+  materialType      MaterialType
+  subTopic          String?
+  difficulty        Difficulty   @default(MEDIUM)
+  estimatedDuration Int?         // duração em minutos
+  fileUrl           String?
+  fileName          String?
+  avgRating         Float        @default(0.0)
+  totalRatings      Int          @default(0)
+  downloadCount     Int          @default(0)
+  tags              String[]
+  createdAt         DateTime     @default(now())
 
   authorId String
   author   User   @relation(fields: [authorId], references: [id], onDelete: Cascade)
 
-  reviews Review[]
-  likes   Like[]
+  ratings Rating[]
 
-  @@map("resources")
+  @@map("materials")
 }
 
-model Review {
+model Rating {
   id        String   @id @default(cuid())
-  rating    Int      @db.SmallInt
+  rating    Int      @db.SmallInt // 1-5
   comment   String?
   createdAt DateTime @default(now())
 
+  materialId String
+  material   Material @relation(fields: [materialId], references: [id], onDelete: Cascade)
   userId     String
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  resourceId String
-  resource   Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, resourceId])
-  @@map("reviews")
+  @@unique([materialId, userId])
+  @@map("ratings")
 }
 
-model Like {
-  id        String   @id @default(cuid())
-  createdAt DateTime @default(now())
-
-  userId     String
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  resourceId String
-  resource   Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, resourceId])
-  @@map("likes")
+enum MaterialType {
+  LESSON_PLAN       // Plano de aula
+  EXERCISE          // Exercício
+  PRESENTATION      // Apresentação
+  VIDEO             // Vídeo
+  DOCUMENT          // Documento
+  WORKSHEET         // Folha de atividades
+  QUIZ              // Quiz/Questionário
+  PROJECT           // Projeto
+  GAME              // Jogo educativo
+  OTHER             // Outros
 }
 
-enum UserRole {
-  ADMIN
-  TEACHER
-  STUDENT
-}
-
-enum ResourceType {
-  LESSON_PLAN
-  EXERCISE
-  PRESENTATION
-  VIDEO
-  DOCUMENT
-  OTHER
+enum Difficulty {
+  EASY              // Fácil
+  MEDIUM            // Médio
+  HARD              // Difícil
 }

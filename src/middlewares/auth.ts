@@ -1,44 +1,95 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import prisma from '../database';
-
-interface JWTPayload {
-  userId: string;
-  email: string;
-}
+import { ResponseHelper } from '../utils/response';
+import env from '../config/env';
+import { AuthenticatedRequest, JWTPayload } from '../types/auth';
 
 export const authenticateToken = async (
-  req: Request,
+  req: AuthenticatedRequest,
   res: Response,
   next: NextFunction
 ) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-
-  if (!token) {
-    return res.status(401).json({ error: 'Token de acesso necessário' });
-  }
-
   try {
-    const secret = process.env.JWT_SECRET;
-    if (!secret) {
-      return res.status(500).json({ error: 'Configuração do servidor inválida' });
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (!token) {
+      return ResponseHelper.unauthorized(res, 'Token de acesso necessário');
     }
 
-    const payload = jwt.verify(token, secret) as JWTPayload;
+    // Verificar e decodificar token
+    const payload = jwt.verify(token, env.JWT_SECRET) as JWTPayload;
     
+    // Buscar usuário no banco
     const user = await prisma.user.findUnique({
       where: { id: payload.userId },
-      select: { id: true, email: true, name: true, role: true }
+      select: { 
+        id: true, 
+        email: true, 
+        name: true, 
+        school: true,
+        materialsCount: true
+      }
     });
 
     if (!user) {
-      return res.status(401).json({ error: 'Usuário não encontrado' });
+      return ResponseHelper.unauthorized(res, 'Usuário não encontrado');
     }
 
+    // Adicionar usuário ao request
     req.user = user;
     next();
+
   } catch (error) {
-    return res.status(403).json({ error: 'Token inválido' });
+    if (error instanceof jwt.TokenExpiredError) {
+      return ResponseHelper.unauthorized(res, 'Token expirado');
+    }
+    
+    if (error instanceof jwt.JsonWebTokenError) {
+      return ResponseHelper.unauthorized(res, 'Token inválido');
+    }
+
+    console.error('Erro na autenticação:', error);
+    return ResponseHelper.serverError(res);
+  }
+};
+
+// Middleware opcional - não bloqueia se não tiver token
+export const optionalAuth = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (!token) {
+      return next(); // Continua sem usuário
+    }
+
+    const payload = jwt.verify(token, env.JWT_SECRET) as JWTPayload;
+    
+    const user = await prisma.user.findUnique({
+      where: { id: payload.userId },
+      select: { 
+        id: true, 
+        email: true, 
+        name: true, 
+        school: true,
+        materialsCount: true
+      }
+    });
+
+    if (user) {
+      req.user = user;
+    }
+
+    next();
+
+  } catch (error) {
+    // Ignora erros de token em auth opcional
+    next();
   }
 };
