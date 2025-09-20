@@ -4,10 +4,10 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import path from 'path';
 
-// Import tipos personalizados
-
-import authRoutes from './routes/auth';
+// Import das rotas e middlewares
+import authRoutes from './routes/authRoutes';
 import materialsRoutes from './routes/materials';
+import { globalErrorHandler } from './utils/errorHandler';
 import env from './config/env';
 
 const app = express();
@@ -53,22 +53,6 @@ app.use((req, res) => {
 });
 
 // Global error handler
-app.use((error: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error('Erro não tratado:', error);
-  
-  if (env.NODE_ENV === 'development') {
-    res.status(500).json({ 
-      success: false,
-      error: 'Erro interno do servidor',
-      details: error.message,
-      stack: error.stack
-    });
-  } else {
-    res.status(500).json({ 
-      success: false,
-      error: 'Erro interno do servidor'
-    });
-  }
-});
+app.use(globalErrorHandler);
 
 export default app;
