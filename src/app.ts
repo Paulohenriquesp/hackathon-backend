@@ -6,7 +6,7 @@ import path from 'path';
 
 // Import das rotas e middlewares
 import authRoutes from './routes/authRoutes';
-import materialsRoutes from './routes/materials';
+import { materialRoutes } from './routes/materialRoutes';
 import { globalErrorHandler } from './utils/errorHandler';
 import env from './config/env';
 
@@ -31,7 +31,7 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // API routes
 app.use('/api/auth', authRoutes);
-app.use('/api/materials', materialsRoutes);
+app.use('/api/materials', materialRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
