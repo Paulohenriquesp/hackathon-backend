@@ -27,14 +27,38 @@ export const updateMaterialSchema = z.object({
 });
 
 export const getMaterialsQuerySchema = z.object({
+  // Filtros básicos
   discipline: z.string().optional(),
   grade: z.string().optional(),
   materialType: z.nativeEnum(MaterialType).optional(),
   difficulty: z.nativeEnum(Difficulty).optional(),
+  
+  // Filtros avançados
+  author: z.string().optional(), // ID ou nome do autor
+  minRating: z.string().transform(Number).optional(), // Rating mínimo
+  maxRating: z.string().transform(Number).optional(), // Rating máximo
+  minDuration: z.string().transform(Number).optional(), // Duração mínima em minutos
+  maxDuration: z.string().transform(Number).optional(), // Duração máxima em minutos
+  
+  // Filtros por data
+  dateFrom: z.string().optional(), // Data início (YYYY-MM-DD)
+  dateTo: z.string().optional(), // Data fim (YYYY-MM-DD)
+  
+  // Busca e tags
+  search: z.string().optional(), // Busca em título, descrição, disciplina
+  tags: z.string().optional(), // Tags separadas por vírgula
+  
+  // Paginação
   page: z.string().transform(Number).default(1),
   limit: z.string().transform(Number).default(10),
-  search: z.string().optional(),
-  tags: z.string().optional(), // tags separadas por vírgula
+  
+  // Ordenação
+  sortBy: z.enum(['createdAt', 'title', 'avgRating', 'downloadCount', 'totalRatings']).default('createdAt'),
+  sortOrder: z.enum(['asc', 'desc']).default('desc'),
+  
+  // Filtros especiais
+  hasFile: z.string().transform(Boolean).optional(), // Apenas materiais com arquivo
+  featured: z.string().transform(Boolean).optional(), // Materiais em destaque (alta avaliação)
 });
 
 export const createRatingSchema = z.object({

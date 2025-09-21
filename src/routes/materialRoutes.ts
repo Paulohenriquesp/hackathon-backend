@@ -7,8 +7,10 @@ const router = Router();
 
 // Rotas públicas (não requerem autenticação)
 router.get('/', materialController.getMaterials);
+router.get('/stats', materialController.getStats);
 router.get('/:id', materialController.getMaterial);
 router.get('/:id/download', materialController.downloadMaterial);
+router.get('/:id/similar', materialController.getSimilarMaterials);
 
 // Rotas protegidas (requerem autenticação)
 router.use(authenticateToken);

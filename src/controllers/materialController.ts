@@ -99,14 +99,15 @@ export class MaterialController {
     }
   }
 
-  // Listar materiais com filtros
+  // Listar materiais com filtros avançados
   async getMaterials(req: Request, res: Response) {
     try {
       const query = getMaterialsQuerySchema.parse(req.query);
       
+      // Construir filtros WHERE
       const where: any = {};
 
-      // Aplicar filtros
+      // Filtros básicos
       if (query.discipline) {
         where.discipline = {
           contains: query.discipline,
@@ -126,6 +127,69 @@ export class MaterialController {
         where.difficulty = query.difficulty;
       }
 
+      // Filtros avançados
+      if (query.author) {
+        where.OR = [
+          {
+            author: {
+              name: {
+                contains: query.author,
+                mode: 'insensitive'
+              }
+            }
+          },
+          {
+            authorId: query.author
+          }
+        ];
+      }
+
+      // Filtros por avaliação
+      if (query.minRating !== undefined) {
+        where.avgRating = {
+          ...where.avgRating,
+          gte: query.minRating
+        };
+      }
+
+      if (query.maxRating !== undefined) {
+        where.avgRating = {
+          ...where.avgRating,
+          lte: query.maxRating
+        };
+      }
+
+      // Filtros por duração
+      if (query.minDuration !== undefined) {
+        where.estimatedDuration = {
+          ...where.estimatedDuration,
+          gte: query.minDuration
+        };
+      }
+
+      if (query.maxDuration !== undefined) {
+        where.estimatedDuration = {
+          ...where.estimatedDuration,
+          lte: query.maxDuration
+        };
+      }
+
+      // Filtros por data
+      if (query.dateFrom) {
+        where.createdAt = {
+          ...where.createdAt,
+          gte: new Date(query.dateFrom)
+        };
+      }
+
+      if (query.dateTo) {
+        where.createdAt = {
+          ...where.createdAt,
+          lte: new Date(query.dateTo + 'T23:59:59.999Z')
+        };
+      }
+
+      // Busca textual avançada
       if (query.search) {
         where.OR = [
           {
@@ -141,13 +205,34 @@ export class MaterialController {
             }
           },
           {
+            discipline: {
+              contains: query.search,
+              mode: 'insensitive'
+            }
+          },
+          {
+            subTopic: {
+              contains: query.search,
+              mode: 'insensitive'
+            }
+          },
+          {
             tags: {
               hasSome: [query.search]
+            }
+          },
+          {
+            author: {
+              name: {
+                contains: query.search,
+                mode: 'insensitive'
+              }
             }
           }
         ];
       }
 
+      // Filtros por tags múltiplas
       if (query.tags) {
         const tagsArray = query.tags.split(',').map(tag => tag.trim());
         where.tags = {
@@ -155,8 +240,32 @@ export class MaterialController {
         };
       }
 
-      // Buscar materiais com paginação
-      const [materials, total] = await Promise.all([
+      // Filtros especiais
+      if (query.hasFile) {
+        where.fileUrl = {
+          not: null
+        };
+      }
+
+      if (query.featured) {
+        where.avgRating = {
+          ...where.avgRating,
+          gte: 4.0
+        };
+        where.totalRatings = {
+          gte: 3
+        };
+      }
+
+      // Configurar ordenação
+      const orderBy: any = {};
+      orderBy[query.sortBy] = query.sortOrder;
+
+      // Validar limite de paginação
+      const limit = Math.min(query.limit, 50); // Máximo 50 por página
+
+      // Buscar materiais com paginação otimizada
+      const [materials, total, stats] = await Promise.all([
         prisma.material.findMany({
           where,
           include: {
@@ -164,30 +273,88 @@ export class MaterialController {
               select: {
                 id: true,
                 name: true,
+                email: true,
                 school: true
+              }
+            },
+            _count: {
+              select: {
+                ratings: true
               }
             }
           },
-          orderBy: {
-            createdAt: 'desc'
-          },
-          skip: (query.page - 1) * query.limit,
-          take: query.limit
+          orderBy,
+          skip: (query.page - 1) * limit,
+          take: limit
         }),
-        prisma.material.count({ where })
+        prisma.material.count({ where }),
+        // Estatísticas adicionais
+        prisma.material.aggregate({
+          where,
+          _avg: {
+            avgRating: true,
+            downloadCount: true
+          },
+          _max: {
+            avgRating: true,
+            downloadCount: true
+          },
+          _min: {
+            avgRating: true,
+            downloadCount: true
+          }
+        })
       ]);
 
-      const totalPages = Math.ceil(total / query.limit);
+      const totalPages = Math.ceil(total / limit);
+
+      // Enriquecer dados dos materiais
+      const enrichedMaterials = materials.map(material => ({
+        ...material,
+        isNew: new Date().getTime() - new Date(material.createdAt).getTime() < 7 * 24 * 60 * 60 * 1000, // Novo se menos de 7 dias
+        isPopular: material.downloadCount > (stats._avg.downloadCount || 0),
+        isHighRated: material.avgRating >= 4.0 && material.totalRatings >= 3
+      }));
 
       res.json({
         success: true,
         data: {
-          materials,
+          materials: enrichedMaterials,
           pagination: {
             current: query.page,
             total: totalPages,
             count: total,
-            limit: query.limit
+            limit: limit,
+            hasNext: query.page < totalPages,
+            hasPrev: query.page > 1
+          },
+          filters: {
+            applied: {
+              discipline: query.discipline,
+              grade: query.grade,
+              materialType: query.materialType,
+              difficulty: query.difficulty,
+              author: query.author,
+              minRating: query.minRating,
+              maxRating: query.maxRating,
+              dateFrom: query.dateFrom,
+              dateTo: query.dateTo,
+              search: query.search,
+              tags: query.tags,
+              hasFile: query.hasFile,
+              featured: query.featured
+            },
+            sorting: {
+              sortBy: query.sortBy,
+              sortOrder: query.sortOrder
+            }
+          },
+          stats: {
+            totalMaterials: total,
+            avgRating: stats._avg.avgRating || 0,
+            avgDownloads: stats._avg.downloadCount || 0,
+            maxRating: stats._max.avgRating || 0,
+            maxDownloads: stats._max.downloadCount || 0
           }
         }
       });
@@ -597,6 +764,245 @@ export class MaterialController {
 
     } catch (error) {
       console.error('Erro ao buscar meus materiais:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Erro interno do servidor'
+      });
+    }
+  }
+
+  // Obter estatísticas gerais dos materiais
+  async getStats(req: Request, res: Response) {
+    try {
+      const [
+        totalMaterials,
+        totalDownloads,
+        totalRatings,
+        avgRating,
+        materialsByType,
+        materialsByDifficulty,
+        materialsByGrade,
+        topAuthors,
+        recentMaterials,
+        popularMaterials
+      ] = await Promise.all([
+        // Total de materiais
+        prisma.material.count(),
+        
+        // Total de downloads
+        prisma.material.aggregate({
+          _sum: { downloadCount: true }
+        }),
+        
+        // Total de avaliações
+        prisma.rating.count(),
+        
+        // Média geral de avaliações
+        prisma.material.aggregate({
+          _avg: { avgRating: true }
+        }),
+        
+        // Materiais por tipo
+        prisma.material.groupBy({
+          by: ['materialType'],
+          _count: { materialType: true },
+          orderBy: { _count: { materialType: 'desc' } }
+        }),
+        
+        // Materiais por dificuldade
+        prisma.material.groupBy({
+          by: ['difficulty'],
+          _count: { difficulty: true },
+          orderBy: { _count: { difficulty: 'desc' } }
+        }),
+        
+        // Materiais por série
+        prisma.material.groupBy({
+          by: ['grade'],
+          _count: { grade: true },
+          orderBy: { _count: { grade: 'desc' } },
+          take: 10
+        }),
+        
+        // Top autores
+        prisma.user.findMany({
+          select: {
+            id: true,
+            name: true,
+            school: true,
+            materialsCount: true,
+            materials: {
+              select: {
+                avgRating: true,
+                downloadCount: true
+              }
+            }
+          },
+          orderBy: { materialsCount: 'desc' },
+          take: 10
+        }),
+        
+        // Materiais recentes (últimos 7 dias)
+        prisma.material.count({
+          where: {
+            createdAt: {
+              gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+            }
+          }
+        }),
+        
+        // Materiais mais populares
+        prisma.material.findMany({
+          select: {
+            id: true,
+            title: true,
+            downloadCount: true,
+            avgRating: true,
+            totalRatings: true,
+            author: {
+              select: {
+                name: true
+              }
+            }
+          },
+          orderBy: { downloadCount: 'desc' },
+          take: 5
+        })
+      ]);
+
+      // Calcular estatísticas dos top autores
+      const enrichedAuthors = topAuthors.map(author => {
+        const totalDownloads = author.materials.reduce((sum, material) => sum + material.downloadCount, 0);
+        const avgAuthorRating = author.materials.length > 0 
+          ? author.materials.reduce((sum, material) => sum + material.avgRating, 0) / author.materials.length 
+          : 0;
+        
+        return {
+          id: author.id,
+          name: author.name,
+          school: author.school,
+          materialsCount: author.materialsCount,
+          totalDownloads,
+          avgRating: avgAuthorRating
+        };
+      });
+
+      res.json({
+        success: true,
+        data: {
+          overview: {
+            totalMaterials,
+            totalDownloads: totalDownloads._sum.downloadCount || 0,
+            totalRatings,
+            avgRating: avgRating._avg.avgRating || 0,
+            recentMaterials
+          },
+          distribution: {
+            byType: materialsByType.map(item => ({
+              type: item.materialType,
+              count: item._count.materialType
+            })),
+            byDifficulty: materialsByDifficulty.map(item => ({
+              difficulty: item.difficulty,
+              count: item._count.difficulty
+            })),
+            byGrade: materialsByGrade.map(item => ({
+              grade: item.grade,
+              count: item._count.grade
+            }))
+          },
+          topAuthors: enrichedAuthors,
+          popularMaterials
+        }
+      });
+
+    } catch (error) {
+      console.error('Erro ao buscar estatísticas:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Erro interno do servidor'
+      });
+    }
+  }
+
+  // Buscar materiais similares
+  async getSimilarMaterials(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const limit = parseInt(req.query.limit as string) || 5;
+
+      // Buscar material original
+      const originalMaterial = await prisma.material.findUnique({
+        where: { id },
+        select: {
+          discipline: true,
+          grade: true,
+          materialType: true,
+          difficulty: true,
+          tags: true
+        }
+      });
+
+      if (!originalMaterial) {
+        return res.status(404).json({
+          success: false,
+          error: 'Material não encontrado'
+        });
+      }
+
+      // Buscar materiais similares
+      const similarMaterials = await prisma.material.findMany({
+        where: {
+          AND: [
+            { id: { not: id } }, // Excluir o material original
+            {
+              OR: [
+                { discipline: originalMaterial.discipline },
+                { grade: originalMaterial.grade },
+                { materialType: originalMaterial.materialType },
+                { difficulty: originalMaterial.difficulty },
+                {
+                  tags: {
+                    hasSome: originalMaterial.tags
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        include: {
+          author: {
+            select: {
+              id: true,
+              name: true,
+              school: true
+            }
+          }
+        },
+        orderBy: [
+          { avgRating: 'desc' },
+          { downloadCount: 'desc' }
+        ],
+        take: limit
+      });
+
+      res.json({
+        success: true,
+        data: {
+          original: {
+            id,
+            discipline: originalMaterial.discipline,
+            grade: originalMaterial.grade,
+            materialType: originalMaterial.materialType,
+            difficulty: originalMaterial.difficulty,
+            tags: originalMaterial.tags
+          },
+          similar: similarMaterials
+        }
+      });
+
+    } catch (error) {
+      console.error('Erro ao buscar materiais similares:', error);
       res.status(500).json({
         success: false,
         error: 'Erro interno do servidor'
