@@ -37,13 +37,11 @@ model Material {
   materialType      MaterialType
   subTopic          String?
   difficulty        Difficulty   @default(MEDIUM)
-  estimatedDuration Int?         // duração em minutos
   fileUrl           String?
   fileName          String?
   avgRating         Float        @default(0.0)
   totalRatings      Int          @default(0)
   downloadCount     Int          @default(0)
-  tags              String[]
   createdAt         DateTime     @default(now())
 
   authorId String

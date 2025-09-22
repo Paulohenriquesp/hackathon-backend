@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import cookieParser from 'cookie-parser';
 import path from 'path';
 
 // Import das rotas e middlewares
@@ -15,8 +16,13 @@ const app = express();
 // Security middlewares
 app.use(helmet());
 app.use(cors({
-  origin: env.NODE_ENV === 'production' ? ['https://yourdomain.com'] : true,
-  credentials: true
+  origin: env.NODE_ENV === 'production'
+    ? ['https://yourdomain.com']
+    : ['http://localhost:3000', 'http://localhost:3009', 'http://localhost:3010'],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  optionsSuccessStatus: 200
 }));
 
 // Logging
@@ -25,6 +31,9 @@ app.use(morgan(env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 // Body parsing
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
+
+// Cookie parsing
+app.use(cookieParser());
 
 // Static files
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));

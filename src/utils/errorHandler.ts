@@ -147,6 +147,7 @@ export const globalErrorHandler = (
   res: Response,
   next: any
 ) => {
+  console.log('🔍 Global Error Handler: Erro recebido');
   console.error('🚨 Erro capturado:', error);
 
   // Erro operacional da aplicação
@@ -157,6 +158,24 @@ export const globalErrorHandler = (
   // Erro de validação do Zod
   if (error instanceof ZodError) {
     return ResponseHelper.validationError(res, error);
+  }
+
+  // Erros do Multer
+  if (error.code === 'LIMIT_FILE_SIZE') {
+    return ResponseHelper.error(res, 'Arquivo muito grande (máximo 10MB)', 400);
+  }
+  
+  if (error.code === 'LIMIT_FILE_COUNT') {
+    return ResponseHelper.error(res, 'Muitos arquivos enviados', 400);
+  }
+  
+  if (error.code === 'LIMIT_UNEXPECTED_FILE') {
+    return ResponseHelper.error(res, 'Campo de arquivo inesperado', 400);
+  }
+  
+  // Erros de filtro de arquivo (multer fileFilter)
+  if (error.message && (error.message.includes('não permitido') || error.message.includes('não permitida'))) {
+    return ResponseHelper.error(res, error.message, 400);
   }
 
   // Erro de email duplicado (Prisma)

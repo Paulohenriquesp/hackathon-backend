@@ -47,14 +47,19 @@ export const authenticate = catchAsync(async (
     throw new AppError('Muitas tentativas de autenticação. Tente novamente em 15 minutos.', 429);
   }
 
+  console.log('🔍 Auth Middleware: Requisição recebida para:', req.method, req.path);
+  console.log('🔍 Auth Middleware: Headers:', req.headers.authorization ? 'Authorization presente' : 'Authorization ausente');
+  
   // Extrair token do header Authorization
   const authHeader = req.headers.authorization;
   
   if (!authHeader) {
+    console.error('❌ Auth Middleware: Token de acesso não encontrado');
     throw new AppError('Token de acesso necessário', 401);
   }
 
   if (!authHeader.startsWith('Bearer ')) {
+    console.error('❌ Auth Middleware: Formato de token inválido');
     throw new AppError('Formato de token inválido. Use: Bearer <token>', 401);
   }
 

@@ -39,8 +39,6 @@ async function main() {
       materialType: 'LESSON_PLAN',
       subTopic: 'Operações básicas',
       difficulty: 'EASY',
-      estimatedDuration: 45,
-      tags: ['matemática', 'operações', 'fundamental'],
       authorId: user1.id,
     },
   });
@@ -54,8 +52,6 @@ async function main() {
       materialType: 'EXERCISE',
       subTopic: 'Verbos e conjugações',
       difficulty: 'MEDIUM',
-      estimatedDuration: 30,
-      tags: ['português', 'verbos', 'gramática'],
       authorId: user2.id,
     },
   });
@@ -69,8 +65,6 @@ async function main() {
       materialType: 'PRESENTATION',
       subTopic: 'República Brasileira',
       difficulty: 'HARD',
-      estimatedDuration: 60,
-      tags: ['história', 'brasil', 'república'],
       authorId: user1.id,
     },
   });

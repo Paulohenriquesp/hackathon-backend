@@ -13,6 +13,9 @@ logs/
 .env
 .env.local
 
+# Configurações locais
+settings.local.json
+
 # Uploads temporários
 uploads/
 

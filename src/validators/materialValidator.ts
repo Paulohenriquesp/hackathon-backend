@@ -9,8 +9,6 @@ export const createMaterialSchema = z.object({
   materialType: z.nativeEnum(MaterialType),
   subTopic: z.string().optional(),
   difficulty: z.nativeEnum(Difficulty).default(Difficulty.MEDIUM),
-  estimatedDuration: z.number().int().positive().optional(),
-  tags: z.array(z.string()).default([]),
   fileName: z.string().optional(),
 });
 
@@ -22,8 +20,6 @@ export const updateMaterialSchema = z.object({
   materialType: z.nativeEnum(MaterialType).optional(),
   subTopic: z.string().optional(),
   difficulty: z.nativeEnum(Difficulty).optional(),
-  estimatedDuration: z.number().int().positive().optional(),
-  tags: z.array(z.string()).optional(),
 });
 
 export const getMaterialsQuerySchema = z.object({
@@ -37,16 +33,13 @@ export const getMaterialsQuerySchema = z.object({
   author: z.string().optional(), // ID ou nome do autor
   minRating: z.string().transform(Number).optional(), // Rating mínimo
   maxRating: z.string().transform(Number).optional(), // Rating máximo
-  minDuration: z.string().transform(Number).optional(), // Duração mínima em minutos
-  maxDuration: z.string().transform(Number).optional(), // Duração máxima em minutos
   
   // Filtros por data
   dateFrom: z.string().optional(), // Data início (YYYY-MM-DD)
   dateTo: z.string().optional(), // Data fim (YYYY-MM-DD)
   
-  // Busca e tags
+  // Busca
   search: z.string().optional(), // Busca em título, descrição, disciplina
-  tags: z.string().optional(), // Tags separadas por vírgula
   
   // Paginação
   page: z.string().transform(Number).default(1),

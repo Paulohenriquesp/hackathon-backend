@@ -10,7 +10,10 @@ export class MaterialController {
   // Criar material com upload
   async createMaterial(req: AuthenticatedRequest, res: Response) {
     try {
-      // Validar dados do formulário
+      console.log('🔍 Backend: Dados recebidos:', req.body);
+      console.log('🔍 Backend: Arquivo recebido:', req.file ? req.file.originalname : 'Nenhum arquivo');
+      
+      // Validar dados recebidos
       const validatedData = createMaterialSchema.parse(req.body);
       
       // Verificar se arquivo foi enviado
@@ -40,8 +43,6 @@ export class MaterialController {
           materialType: validatedData.materialType,
           subTopic: validatedData.subTopic,
           difficulty: validatedData.difficulty,
-          estimatedDuration: validatedData.estimatedDuration,
-          tags: validatedData.tags,
           fileUrl: uploadedFile.url,
           fileName: uploadedFile.originalName,
           authorId: req.user!.id,
@@ -84,10 +85,12 @@ export class MaterialController {
       }
 
       if (error.name === 'ZodError') {
+        console.error('❌ Backend: Erro de validação Zod:', error.errors);
         return res.status(400).json({
           success: false,
-          error: 'Dados inválidos',
-          details: error.errors
+          error: 'Dados inválidos - Detalhes no console',
+          details: error.errors,
+          receivedData: req.body
         });
       }
 
@@ -159,20 +162,6 @@ export class MaterialController {
         };
       }
 
-      // Filtros por duração
-      if (query.minDuration !== undefined) {
-        where.estimatedDuration = {
-          ...where.estimatedDuration,
-          gte: query.minDuration
-        };
-      }
-
-      if (query.maxDuration !== undefined) {
-        where.estimatedDuration = {
-          ...where.estimatedDuration,
-          lte: query.maxDuration
-        };
-      }
 
       // Filtros por data
       if (query.dateFrom) {
@@ -217,11 +206,6 @@ export class MaterialController {
             }
           },
           {
-            tags: {
-              hasSome: [query.search]
-            }
-          },
-          {
             author: {
               name: {
                 contains: query.search,
@@ -232,13 +216,6 @@ export class MaterialController {
         ];
       }
 
-      // Filtros por tags múltiplas
-      if (query.tags) {
-        const tagsArray = query.tags.split(',').map(tag => tag.trim());
-        where.tags = {
-          hasSome: tagsArray
-        };
-      }
 
       // Filtros especiais
       if (query.hasFile) {
@@ -340,7 +317,6 @@ export class MaterialController {
               dateFrom: query.dateFrom,
               dateTo: query.dateTo,
               search: query.search,
-              tags: query.tags,
               hasFile: query.hasFile,
               featured: query.featured
             },
@@ -939,7 +915,6 @@ export class MaterialController {
           grade: true,
           materialType: true,
           difficulty: true,
-          tags: true
         }
       });
 
@@ -961,11 +936,6 @@ export class MaterialController {
                 { grade: originalMaterial.grade },
                 { materialType: originalMaterial.materialType },
                 { difficulty: originalMaterial.difficulty },
-                {
-                  tags: {
-                    hasSome: originalMaterial.tags
-                  }
-                }
               ]
             }
           ]
@@ -995,7 +965,6 @@ export class MaterialController {
             grade: originalMaterial.grade,
             materialType: originalMaterial.materialType,
             difficulty: originalMaterial.difficulty,
-            tags: originalMaterial.tags
           },
           similar: similarMaterials
         }

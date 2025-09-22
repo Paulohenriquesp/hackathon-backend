@@ -12,8 +12,7 @@ export const createMaterial = async (req: any, res: Response) => {
       materialType, 
       subTopic, 
       difficulty, 
-      estimatedDuration, 
-      tags 
+ 
     } = req.body;
     const authorId = req.user?.id;
     const file = req.file;
@@ -57,10 +56,8 @@ export const createMaterial = async (req: any, res: Response) => {
         materialType: materialType || MaterialType.DOCUMENT,
         subTopic,
         difficulty: difficulty || Difficulty.MEDIUM,
-        estimatedDuration: estimatedDuration ? parseInt(estimatedDuration) : null,
         fileUrl: file ? `/uploads/${file.filename}` : null,
         fileName: file ? file.originalname : null,
-        tags: Array.isArray(tags) ? tags : [],
         authorId
       },
       include: {
@@ -101,7 +98,6 @@ export const getMaterials = async (req: Request, res: Response) => {
       grade, 
       materialType,
       difficulty,
-      tags,
       search,
       page = 1, 
       limit = 10 
@@ -133,12 +129,6 @@ export const getMaterials = async (req: Request, res: Response) => {
       where.difficulty = difficulty;
     }
 
-    if (tags) {
-      const tagArray = Array.isArray(tags) ? tags : [tags];
-      where.tags = {
-        hasSome: tagArray
-      };
-    }
 
     if (search) {
       where.OR = [

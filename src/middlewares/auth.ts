@@ -11,10 +11,14 @@ export const authenticateToken = async (
   next: NextFunction
 ) => {
   try {
+    console.log('🔍 Auth Token: Requisição recebida para:', req.method, req.path);
     const authHeader = req.headers['authorization'];
+    console.log('🔍 Auth Token: Header Authorization:', authHeader ? 'presente' : 'ausente');
+    
     const token = authHeader && authHeader.split(' ')[1];
 
     if (!token) {
+      console.error('❌ Auth Token: Token não encontrado');
       return ResponseHelper.unauthorized(res, 'Token de acesso necessário');
     }
 
