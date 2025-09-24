@@ -12,13 +12,21 @@ export const authenticateToken = async (
 ) => {
   try {
     console.log('🔍 Auth Token: Requisição recebida para:', req.method, req.path);
+
+    // Verificar primeiro no header Authorization
     const authHeader = req.headers['authorization'];
-    console.log('🔍 Auth Token: Header Authorization:', authHeader ? 'presente' : 'ausente');
-    
-    const token = authHeader && authHeader.split(' ')[1];
+    let token = authHeader && authHeader.split(' ')[1];
+
+    // Se não houver token no header, verificar nos cookies
+    if (!token && req.cookies) {
+      token = req.cookies.auth_token;
+      console.log('🔍 Auth Token: Token encontrado em cookie:', token ? 'presente' : 'ausente');
+    } else {
+      console.log('🔍 Auth Token: Header Authorization:', authHeader ? 'presente' : 'ausente');
+    }
 
     if (!token) {
-      console.error('❌ Auth Token: Token não encontrado');
+      console.error('❌ Auth Token: Token não encontrado nem em header nem em cookie');
       return ResponseHelper.unauthorized(res, 'Token de acesso necessário');
     }
 

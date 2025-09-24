@@ -82,6 +82,15 @@ export const register = catchAsync(async (req: any, res: Response) => {
     email: user.email
   });
 
+  // Configurar cookie HTTPOnly para o token
+  res.cookie('auth_token', token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 24 * 60 * 60 * 1000, // 24 horas
+    path: '/'
+  });
+
   // Log de segurança
   console.log(`✅ Novo usuário registrado: ${email} (ID: ${user.id})`);
 
@@ -135,6 +144,15 @@ export const login = catchAsync(async (req: any, res: Response) => {
 
   // Remover senha da resposta
   const { password: _, ...userWithoutPassword } = user;
+
+  // Configurar cookie HTTPOnly para o token
+  res.cookie('auth_token', token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 24 * 60 * 60 * 1000, // 24 horas
+    path: '/'
+  });
 
   // Log de login bem-sucedido
   console.log(`✅ Login bem-sucedido: ${email} (ID: ${user.id})`);
@@ -283,11 +301,16 @@ export const changePassword = catchAsync(async (req: AuthenticatedRequest, res: 
   return ResponseHelper.success(res, 'Senha alterada com sucesso');
 });
 
-// Logout (invalidar token - implementação básica)
+// Logout (invalidar token e limpar cookie)
 export const logout = catchAsync(async (req: AuthenticatedRequest, res: Response) => {
-  // Em uma implementação completa, você adicionaria o token a uma blacklist
-  // Por ora, o logout é feito no frontend removendo o token
-  
+  // Limpar cookie de autenticação
+  res.clearCookie('auth_token', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    path: '/'
+  });
+
   const userId = req.user?.id;
   if (userId) {
     console.log(`👋 Logout realizado: User ID ${userId}`);
