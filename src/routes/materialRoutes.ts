@@ -9,11 +9,13 @@ const router = Router();
 router.get('/', materialController.getMaterials);
 router.get('/stats', materialController.getStats);
 router.get('/:id', materialController.getMaterial);
-router.get('/:id/download', materialController.downloadMaterial);
 router.get('/:id/similar', materialController.getSimilarMaterials);
 
 // Rotas protegidas (requerem autenticação)
 router.use(authenticateToken);
+
+// Download de material (PROTEGIDO - requer login)
+router.get('/:id/download', materialController.downloadMaterial);
 
 // Upload de material (com arquivo)
 router.post(
