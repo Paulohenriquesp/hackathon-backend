@@ -8,14 +8,13 @@ const router = Router();
 // Rotas públicas (não requerem autenticação)
 router.get('/', materialController.getMaterials);
 router.get('/stats', materialController.getStats);
-router.get('/:id', materialController.getMaterial);
-router.get('/:id/similar', materialController.getSimilarMaterials);
 
 // Rotas protegidas (requerem autenticação)
 router.use(authenticateToken);
 
-// Download de material (PROTEGIDO - requer login)
-router.get('/:id/download', materialController.downloadMaterial);
+// IMPORTANTE: Rotas específicas ANTES de rotas com parâmetros dinâmicos /:id
+// Materiais do usuário logado
+router.get('/user/my-materials', materialController.getMyMaterials);
 
 // Upload de material (com arquivo)
 router.post(
@@ -25,14 +24,15 @@ router.post(
   materialController.createMaterial
 );
 
-// Gerenciamento de materiais
+// Rotas com :id (devem vir DEPOIS das rotas específicas)
+router.get('/:id', materialController.getMaterial);
+router.get('/:id/similar', materialController.getSimilarMaterials);
+router.get('/:id/download', materialController.downloadMaterial);
 router.put('/:id', materialController.updateMaterial);
 router.delete('/:id', materialController.deleteMaterial);
-
-// Avaliações
 router.post('/:id/rate', materialController.rateMaterial);
 
-// Materiais do usuário logado
-router.get('/user/my-materials', materialController.getMyMaterials);
+// Geração de atividades com IA (PROTEGIDO - requer login)
+router.post('/:id/generate-activities', materialController.generateActivities);
 
 export { router as materialRoutes };

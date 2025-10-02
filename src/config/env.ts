@@ -10,6 +10,7 @@ const envSchema = z.object({
   JWT_SECRET: z.string(),
   MAX_FILE_SIZE: z.string().transform(Number).optional(),
   UPLOAD_DIR: z.string().default('uploads'),
+  OPENAI_API_KEY: z.string().optional(),
 });
 
 const env = envSchema.parse(process.env);

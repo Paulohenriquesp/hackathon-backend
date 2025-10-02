@@ -3,6 +3,9 @@ import { PrismaClient } from '@prisma/client';
 import { createMaterialSchema, updateMaterialSchema, getMaterialsQuerySchema, createRatingSchema } from '../validators/materialValidator';
 import { getFileUrl, deleteFile, UploadedFile } from '../middlewares/upload';
 import { AuthenticatedRequest } from '../types/auth';
+import { aiService } from '../services/aiService';
+import { pdfService } from '../services/pdfService';
+import path from 'path';
 
 const prisma = new PrismaClient();
 
@@ -975,6 +978,125 @@ export class MaterialController {
       res.status(500).json({
         success: false,
         error: 'Erro interno do servidor'
+      });
+    }
+  }
+
+  // Gerar atividades com IA a partir do material
+  async generateActivities(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+
+      console.log('🤖 Gerando atividades com IA para material:', id);
+
+      // Buscar material
+      const material = await prisma.material.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          discipline: true,
+          grade: true,
+          materialType: true,
+          fileUrl: true,
+          fileName: true,
+          authorId: true,
+        }
+      });
+
+      if (!material) {
+        return res.status(404).json({
+          success: false,
+          error: 'Material não encontrado'
+        });
+      }
+
+      // Extrair conteúdo do material
+      let materialContent = '';
+
+      // Se há arquivo, tentar extrair texto
+      if (material.fileUrl && material.fileName) {
+        const uploadsDir = path.join(process.cwd(), 'uploads');
+        const filename = material.fileUrl.split('/').pop();
+
+        if (filename) {
+          const filePath = path.join(uploadsDir, filename);
+
+          // Verificar se arquivo suporta extração de texto
+          if (pdfService.supportsTextExtraction(material.fileName)) {
+            try {
+              materialContent = await pdfService.extractTextFromFile(filePath);
+              console.log('✅ Texto extraído do arquivo:', materialContent.length, 'caracteres');
+            } catch (extractError: any) {
+              console.warn('⚠️ Não foi possível extrair texto do arquivo:', extractError.message);
+              // Continuar com descrição se extração falhar
+              materialContent = material.description;
+            }
+          } else {
+            console.log('ℹ️ Arquivo não suporta extração de texto, usando descrição');
+            materialContent = material.description;
+          }
+        }
+      } else {
+        // Se não há arquivo, usar descrição
+        materialContent = material.description;
+      }
+
+      // Validar se há conteúdo suficiente
+      if (!materialContent || materialContent.trim().length < 100) {
+        return res.status(400).json({
+          success: false,
+          error: 'Material não possui conteúdo suficiente para gerar atividades. O material precisa ter pelo menos 100 caracteres.'
+        });
+      }
+
+      // Gerar atividades usando IA
+      const activities = await aiService.generateActivities(
+        materialContent,
+        material.title,
+        material.discipline,
+        material.grade,
+        material.materialType
+      );
+
+      console.log('✅ Atividades geradas com sucesso');
+
+      res.json({
+        success: true,
+        data: {
+          material: {
+            id: material.id,
+            title: material.title,
+            discipline: material.discipline,
+            grade: material.grade,
+          },
+          activities,
+          metadata: {
+            contentLength: materialContent.length,
+            extractedFromFile: !!material.fileUrl && pdfService.supportsTextExtraction(material.fileName || ''),
+            generatedAt: new Date().toISOString(),
+          }
+        },
+        message: 'Atividades geradas com sucesso'
+      });
+
+    } catch (error: any) {
+      console.error('❌ Erro ao gerar atividades:', error);
+
+      // Erros específicos da OpenAI
+      if (error.message.includes('OpenAI') || error.message.includes('API')) {
+        return res.status(503).json({
+          success: false,
+          error: 'Serviço de IA temporariamente indisponível',
+          details: error.message
+        });
+      }
+
+      res.status(500).json({
+        success: false,
+        error: 'Erro ao gerar atividades',
+        details: error.message
       });
     }
   }
