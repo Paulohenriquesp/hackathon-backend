@@ -12,8 +12,8 @@ export const createMaterialSchema = z.object({
   grade: z.string().min(1, 'Série é obrigatória'),
   materialType: z.nativeEnum(MaterialType),
   subTopic: z.string()
-    .max(100, 'Subtópico deve ter no máximo 100 caracteres')
-    .optional(),
+    .min(3, 'Subtópico deve ter pelo menos 3 caracteres')
+    .max(20, 'Subtópico deve ter no máximo 20 caracteres'),
   difficulty: z.nativeEnum(Difficulty).default(Difficulty.MEDIUM),
   fileName: z.string().optional(),
 });
@@ -31,6 +31,7 @@ export const updateMaterialSchema = z.object({
   grade: z.string().min(1, 'Série é obrigatória').optional(),
   materialType: z.nativeEnum(MaterialType).optional(),
   subTopic: z.string()
+    .min(3, 'Subtópico deve ter pelo menos 3 caracteres')
     .max(100, 'Subtópico deve ter no máximo 100 caracteres')
     .optional(),
   difficulty: z.nativeEnum(Difficulty).optional(),
