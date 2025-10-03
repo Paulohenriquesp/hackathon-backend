@@ -71,7 +71,7 @@ export const getMaterialsQuerySchema = z.object({
 
 export const createRatingSchema = z.object({
   rating: z.number().int().min(1, 'Rating mínimo é 1').max(5, 'Rating máximo é 5'),
-  comment: z.string().optional(),
+  comment: z.string().max(500, 'Comentário não pode ter mais de 500 caracteres').optional(),
 });
 
 export type CreateMaterialData = z.infer<typeof createMaterialSchema>;

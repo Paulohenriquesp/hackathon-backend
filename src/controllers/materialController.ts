@@ -982,12 +982,12 @@ export class MaterialController {
     }
   }
 
-  // Gerar atividades com IA a partir do material
+  // Gerar plano de aula + atividades com IA a partir do material
   async generateActivities(req: AuthenticatedRequest, res: Response) {
     try {
       const { id } = req.params;
 
-      console.log('🤖 Gerando atividades com IA para material:', id);
+      console.log('🤖 Gerando plano de aula e atividades com IA para material:', id);
 
       // Buscar material
       const material = await prisma.material.findUnique({
@@ -999,6 +999,7 @@ export class MaterialController {
           discipline: true,
           grade: true,
           materialType: true,
+          difficulty: true,
           fileUrl: true,
           fileName: true,
           authorId: true,
@@ -1047,20 +1048,21 @@ export class MaterialController {
       if (!materialContent || materialContent.trim().length < 100) {
         return res.status(400).json({
           success: false,
-          error: 'Material não possui conteúdo suficiente para gerar atividades. O material precisa ter pelo menos 100 caracteres.'
+          error: 'Material não possui conteúdo suficiente para gerar o plano de aula e atividades. O material precisa ter pelo menos 100 caracteres.'
         });
       }
 
-      // Gerar atividades usando IA
-      const activities = await aiService.generateActivities(
+      // Gerar plano de aula + atividades usando IA
+      const content = await aiService.generateContent(
         materialContent,
         material.title,
         material.discipline,
         material.grade,
-        material.materialType
+        material.materialType,
+        material.difficulty
       );
 
-      console.log('✅ Atividades geradas com sucesso');
+      console.log('✅ Plano de aula e atividades geradas com sucesso');
 
       res.json({
         success: true,
@@ -1070,19 +1072,20 @@ export class MaterialController {
             title: material.title,
             discipline: material.discipline,
             grade: material.grade,
+            difficulty: material.difficulty,
           },
-          activities,
+          content,
           metadata: {
             contentLength: materialContent.length,
             extractedFromFile: !!material.fileUrl && pdfService.supportsTextExtraction(material.fileName || ''),
             generatedAt: new Date().toISOString(),
           }
         },
-        message: 'Atividades geradas com sucesso'
+        message: 'Plano de aula e atividades geradas com sucesso'
       });
 
     } catch (error: any) {
-      console.error('❌ Erro ao gerar atividades:', error);
+      console.error('❌ Erro ao gerar plano de aula e atividades:', error);
 
       // Erros específicos da OpenAI
       if (error.message.includes('OpenAI') || error.message.includes('API')) {
@@ -1095,7 +1098,7 @@ export class MaterialController {
 
       res.status(500).json({
         success: false,
-        error: 'Erro ao gerar atividades',
+        error: 'Erro ao gerar plano de aula e atividades',
         details: error.message
       });
     }
