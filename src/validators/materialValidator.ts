@@ -2,23 +2,37 @@ import { z } from 'zod';
 import { MaterialType, Difficulty } from '@prisma/client';
 
 export const createMaterialSchema = z.object({
-  title: z.string().min(3, 'Título deve ter pelo menos 3 caracteres'),
-  description: z.string().min(10, 'Descrição deve ter pelo menos 10 caracteres'),
+  title: z.string()
+    .min(3, 'Título deve ter pelo menos 3 caracteres')
+    .max(100, 'Título deve ter no máximo 100 caracteres'),
+  description: z.string()
+    .min(10, 'Descrição deve ter pelo menos 10 caracteres')
+    .max(500, 'Descrição deve ter no máximo 500 caracteres'),
   discipline: z.string().min(2, 'Disciplina é obrigatória'),
   grade: z.string().min(1, 'Série é obrigatória'),
   materialType: z.nativeEnum(MaterialType),
-  subTopic: z.string().optional(),
+  subTopic: z.string()
+    .max(100, 'Subtópico deve ter no máximo 100 caracteres')
+    .optional(),
   difficulty: z.nativeEnum(Difficulty).default(Difficulty.MEDIUM),
   fileName: z.string().optional(),
 });
 
 export const updateMaterialSchema = z.object({
-  title: z.string().min(3, 'Título deve ter pelo menos 3 caracteres').optional(),
-  description: z.string().min(10, 'Descrição deve ter pelo menos 10 caracteres').optional(),
+  title: z.string()
+    .min(3, 'Título deve ter pelo menos 3 caracteres')
+    .max(100, 'Título deve ter no máximo 100 caracteres')
+    .optional(),
+  description: z.string()
+    .min(10, 'Descrição deve ter pelo menos 10 caracteres')
+    .max(500, 'Descrição deve ter no máximo 500 caracteres')
+    .optional(),
   discipline: z.string().min(2, 'Disciplina é obrigatória').optional(),
   grade: z.string().min(1, 'Série é obrigatória').optional(),
   materialType: z.nativeEnum(MaterialType).optional(),
-  subTopic: z.string().optional(),
+  subTopic: z.string()
+    .max(100, 'Subtópico deve ter no máximo 100 caracteres')
+    .optional(),
   difficulty: z.nativeEnum(Difficulty).optional(),
 });
 
