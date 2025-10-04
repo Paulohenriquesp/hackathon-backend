@@ -39,24 +39,20 @@ export const authenticate = catchAsync(async (
   res: Response,
   next: NextFunction
 ) => {
-  // Rate limiting por IP
-  const clientIP = req.ip || req.connection.remoteAddress || 'unknown';
-  
-  if (!checkRateLimit(clientIP)) {
-    console.warn(`🚨 Rate limit excedido para IP: ${clientIP}`);
-    throw new AppError('Muitas tentativas de autenticação. Tente novamente em 15 minutos.', 429);
-  }
-
   console.log('🔍 Auth Middleware: Requisição recebida para:', req.method, req.path);
-  console.log('🔍 Auth Middleware: Cookies:', req.cookies ? 'Presente' : 'Ausente');
+  console.log('🔍 Auth Middleware: Cookies completos:', req.cookies);
+  console.log('🔍 Auth Middleware: Headers completos:', req.headers);
 
   // Extrair token do cookie HttpOnly
   const token = req.cookies?.auth_token;
 
   if (!token) {
     console.error('❌ Auth Middleware: Token de acesso não encontrado no cookie');
+    console.error('❌ Cookies recebidos:', JSON.stringify(req.cookies));
     throw new AppError('Token de acesso necessário. Faça login novamente.', 401);
   }
+
+  console.log('✅ Auth Middleware: Token encontrado no cookie!');
 
   try {
     // Verificar e decodificar o JWT

@@ -30,13 +30,15 @@ npm run docker:up
 
 # 4. Configurar banco de dados
 npm run db:push      # Aplicar schema do Prisma
-npm run db:generate  # Gerar cliente Prisma
+npm run db:generate  # Gerar cliente Prisma (OBRIGATÓRIO!)
 
 # 5. Executar servidor em desenvolvimento
 npm run dev
 
 # Servidor rodando em http://localhost:3001
 ```
+
+> ⚠️ **IMPORTANTE**: Sempre que clonar o projeto ou deletar a pasta `node_modules`, execute `npx prisma generate` antes de rodar o servidor. Esse comando gera o cliente do Prisma necessário para acessar o banco de dados.
 
 ## 🔧 Scripts Disponíveis
 
