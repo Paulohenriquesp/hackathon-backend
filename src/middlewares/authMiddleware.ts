@@ -48,25 +48,14 @@ export const authenticate = catchAsync(async (
   }
 
   console.log('🔍 Auth Middleware: Requisição recebida para:', req.method, req.path);
-  console.log('🔍 Auth Middleware: Headers:', req.headers.authorization ? 'Authorization presente' : 'Authorization ausente');
-  
-  // Extrair token do header Authorization
-  const authHeader = req.headers.authorization;
-  
-  if (!authHeader) {
-    console.error('❌ Auth Middleware: Token de acesso não encontrado');
-    throw new AppError('Token de acesso necessário', 401);
-  }
+  console.log('🔍 Auth Middleware: Cookies:', req.cookies ? 'Presente' : 'Ausente');
 
-  if (!authHeader.startsWith('Bearer ')) {
-    console.error('❌ Auth Middleware: Formato de token inválido');
-    throw new AppError('Formato de token inválido. Use: Bearer <token>', 401);
-  }
-
-  const token = authHeader.substring(7); // Remove 'Bearer '
+  // Extrair token do cookie HttpOnly
+  const token = req.cookies?.auth_token;
 
   if (!token) {
-    throw new AppError('Token não fornecido', 401);
+    console.error('❌ Auth Middleware: Token de acesso não encontrado no cookie');
+    throw new AppError('Token de acesso necessário. Faça login novamente.', 401);
   }
 
   try {
@@ -149,15 +138,10 @@ export const optionalAuthenticate = catchAsync(async (
   res: Response,
   next: NextFunction
 ) => {
-  const authHeader = req.headers.authorization;
+  // Extrair token do cookie
+  const token = req.cookies?.auth_token;
 
-  // Se não há header de autorização, continua sem usuário
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return next();
-  }
-
-  const token = authHeader.substring(7);
-
+  // Se não há cookie de autenticação, continua sem usuário
   if (!token) {
     return next();
   }

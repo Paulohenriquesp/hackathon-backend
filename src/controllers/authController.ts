@@ -94,10 +94,13 @@ export const register = catchAsync(async (req: any, res: Response) => {
   // Log de segurança
   console.log(`✅ Novo usuário registrado: ${email} (ID: ${user.id})`);
 
+  // NÃO retornar o token no body - apenas no cookie HttpOnly
+  // Token é enviado automaticamente via cookie, não no response body
+  console.log('✅ AuthController register: Retornando apenas user (token no cookie)');
   return ResponseHelper.success(
     res,
     'Professor cadastrado com sucesso',
-    { user, token },
+    { user }, // Apenas user, SEM token!
     201
   );
 });
@@ -157,10 +160,11 @@ export const login = catchAsync(async (req: any, res: Response) => {
   // Log de login bem-sucedido
   console.log(`✅ Login bem-sucedido: ${email} (ID: ${user.id})`);
 
+  // NÃO retornar o token no body - apenas no cookie
   return ResponseHelper.success(
     res,
     'Login realizado com sucesso',
-    { user: userWithoutPassword, token }
+    { user: userWithoutPassword }
   );
 });
 

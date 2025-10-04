@@ -450,14 +450,18 @@ curl -X POST http://localhost:3001/api/auth/register \
 
 ### Login
 ```bash
-curl -X POST http://localhost:3001/api/auth/login \
+curl -i -X POST http://localhost:3001/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{
     "email": "joao@escola.com",
     "password": "senha123"
-  }'
+  }' \
+  -c cookies.txt
 
-# Resposta: { "token": "eyJhbGc...", "user": {...} }
+# Resposta:
+# Set-Cookie: auth_token=eyJhbGc...; HttpOnly; SameSite=Lax
+# { "success": true, "data": { "user": {...} } }
+# (Token NÃO retornado no body - apenas no cookie)
 ```
 
 ### Listar Materiais (com filtros)
@@ -472,7 +476,7 @@ curl "http://localhost:3001/api/materials?discipline=Matemática&grade=6º ano&d
 ### Criar Material (com arquivo)
 ```bash
 curl -X POST http://localhost:3001/api/materials \
-  -H "Authorization: Bearer SEU_TOKEN_JWT" \
+  -b cookies.txt \
   -F "title=Geometria Básica" \
   -F "description=Material sobre formas geométricas" \
   -F "discipline=Matemática" \
@@ -486,7 +490,7 @@ curl -X POST http://localhost:3001/api/materials \
 ### Avaliar Material
 ```bash
 curl -X POST http://localhost:3001/api/materials/MATERIAL_ID/rate \
-  -H "Authorization: Bearer SEU_TOKEN_JWT" \
+  -b cookies.txt \
   -H "Content-Type: application/json" \
   -d '{
     "rating": 5,
@@ -497,7 +501,7 @@ curl -X POST http://localhost:3001/api/materials/MATERIAL_ID/rate \
 ### ✨ Gerar Plano de Aula + Atividades com IA
 ```bash
 curl -X POST http://localhost:3001/api/materials/MATERIAL_ID/generate-activities \
-  -H "Authorization: Bearer SEU_TOKEN_JWT" \
+  -b cookies.txt \
   -H "Content-Type: application/json"
 
 # Resposta: JSON completo com plano de aula + atividades
@@ -506,38 +510,96 @@ curl -X POST http://localhost:3001/api/materials/MATERIAL_ID/generate-activities
 ### Download de Material
 ```bash
 curl -X GET http://localhost:3001/api/materials/MATERIAL_ID/download \
-  -H "Authorization: Bearer SEU_TOKEN_JWT" \
+  -b cookies.txt \
   --output arquivo-baixado.pdf
 ```
 
-## 🔒 Autenticação JWT
+## 🔒 Autenticação JWT com HttpOnly Cookies
 
 ### Como funciona?
 
 1. **Login**: Cliente envia email + senha
 2. **Verificação**: Backend valida credenciais no banco
 3. **Token**: Backend gera JWT assinado com `JWT_SECRET`
-4. **Resposta**: Retorna `{ token, user }`
-5. **Requests**: Cliente envia token no header `Authorization: Bearer <token>`
-6. **Middleware**: Backend valida token em rotas protegidas
+4. **Cookie**: Backend define HttpOnly cookie com token (NÃO retorna token no body)
+5. **Resposta**: Retorna apenas `{ user }` (sem token)
+6. **Requests**: Cliente envia cookie automaticamente em todas as requisições
+7. **Middleware**: Backend valida token do cookie em rotas protegidas
+
+### ✅ Segurança HttpOnly Cookies
+
+**Vantagens sobre localStorage:**
+- ✅ **Imune a XSS**: JavaScript não pode acessar o cookie (flag `httpOnly`)
+- ✅ **Proteção CSRF**: Cookie só enviado em requisições do mesmo site (`sameSite: 'lax'`)
+- ✅ **HTTPS Only**: Cookie só via HTTPS em produção (`secure: true`)
+- ✅ **Expiração automática**: 24 horas (`maxAge: 86400`)
+
+### Configuração do Cookie (Backend)
+
+```typescript
+// Login/Register - Define cookie HttpOnly
+res.cookie('auth_token', token, {
+  httpOnly: true,                              // JavaScript não pode acessar
+  secure: process.env.NODE_ENV === 'production', // HTTPS apenas em produção
+  sameSite: 'lax',                             // Proteção CSRF
+  maxAge: 24 * 60 * 60 * 1000,                // 24 horas
+  path: '/'
+});
+
+// NÃO retornar token no body - apenas user
+res.json({ success: true, data: { user } });
+```
+
+### Middleware de Autenticação
+
+```typescript
+// Lê token do cookie (NÃO do header Authorization)
+const token = req.cookies?.auth_token;
+
+if (!token) {
+  throw new AppError('Token de acesso necessário', 401);
+}
+
+// Valida token JWT
+const decoded = jwt.verify(token, JWT_SECRET);
+req.user = decoded;
+```
 
 ### Exemplo de Uso no Frontend
+
 ```typescript
-// Login
+// Login - Cookie setado automaticamente pelo navegador
 const response = await fetch('/api/auth/login', {
   method: 'POST',
+  credentials: 'include', // IMPORTANTE: Envia cookies automaticamente
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({ email, password })
 });
-const { token, user } = await response.json();
-localStorage.setItem('token', token);
+const { user } = await response.json(); // Sem token!
 
-// Request protegida
+// Request protegida - Cookie enviado automaticamente
 const materials = await fetch('/api/materials', {
-  headers: {
-    'Authorization': `Bearer ${localStorage.getItem('token')}`
-  }
+  credentials: 'include' // Envia cookie automaticamente
 });
+
+// Axios configurado para cookies
+const api = axios.create({
+  baseURL: API_URL,
+  withCredentials: true // Envia cookies automaticamente
+});
+```
+
+### CORS Configuration
+
+```typescript
+// app.ts - CORS deve permitir credentials
+app.use(cors({
+  origin: ['http://localhost:3000'], // Frontend URL
+  credentials: true, // IMPORTANTE: Permite cookies
+}));
+
+// cookie-parser middleware
+app.use(cookieParser());
 ```
 
 ## 🔄 Fluxo de Upload de Material
