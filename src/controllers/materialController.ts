@@ -1,13 +1,12 @@
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
 import { createMaterialSchema, updateMaterialSchema, getMaterialsQuerySchema, createRatingSchema } from '../validators/materialValidator';
 import { getFileUrl, deleteFile, UploadedFile } from '../middlewares/upload';
 import { AuthenticatedRequest } from '../types/auth';
 import { aiService } from '../services/aiService';
 import { pdfService } from '../services/pdfService';
+import { materialRepository } from '../repositories/materialRepository';
+import { userRepository } from '../repositories/userRepository';
 import path from 'path';
-
-const prisma = new PrismaClient();
 
 export class MaterialController {
   // Criar material com upload
@@ -15,10 +14,10 @@ export class MaterialController {
     try {
       console.log('🔍 Backend: Dados recebidos:', req.body);
       console.log('🔍 Backend: Arquivo recebido:', req.file ? req.file.originalname : 'Nenhum arquivo');
-      
+
       // Validar dados recebidos
       const validatedData = createMaterialSchema.parse(req.body);
-      
+
       // Verificar se arquivo foi enviado
       if (!req.file) {
         return res.status(400).json({
@@ -36,41 +35,24 @@ export class MaterialController {
         url: getFileUrl(req.file.filename)
       };
 
-      // Criar material no banco
-      const material = await prisma.material.create({
-        data: {
-          title: validatedData.title,
-          description: validatedData.description,
-          discipline: validatedData.discipline,
-          grade: validatedData.grade,
-          materialType: validatedData.materialType,
-          subTopic: validatedData.subTopic,
-          difficulty: validatedData.difficulty,
-          fileUrl: uploadedFile.url,
-          fileName: uploadedFile.originalName,
-          authorId: req.user!.id,
-        },
-        include: {
-          author: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              school: true
-            }
-          }
+      // Criar material no banco usando repository
+      const material = await materialRepository.create({
+        title: validatedData.title,
+        description: validatedData.description,
+        discipline: validatedData.discipline,
+        grade: validatedData.grade,
+        materialType: validatedData.materialType,
+        subTopic: validatedData.subTopic,
+        difficulty: validatedData.difficulty,
+        fileUrl: uploadedFile.url,
+        fileName: uploadedFile.originalName,
+        author: {
+          connect: { id: req.user!.id }
         }
       });
 
       // Incrementar contador de materiais do usuário
-      await prisma.user.update({
-        where: { id: req.user!.id },
-        data: {
-          materialsCount: {
-            increment: 1
-          }
-        }
-      });
+      await userRepository.incrementMaterialsCount(req.user!.id);
 
       res.status(201).json({
         success: true,
@@ -109,190 +91,34 @@ export class MaterialController {
   async getMaterials(req: Request, res: Response) {
     try {
       const query = getMaterialsQuerySchema.parse(req.query);
-      
-      // Construir filtros WHERE
-      const where: any = {};
 
-      // Filtros básicos
-      if (query.discipline) {
-        where.discipline = {
-          contains: query.discipline,
-          mode: 'insensitive'
-        };
-      }
+      // Preparar filtros
+      const filters = {
+        discipline: query.discipline,
+        grade: query.grade,
+        materialType: query.materialType,
+        difficulty: query.difficulty,
+        minRating: query.minRating,
+        maxRating: query.maxRating,
+        search: query.search
+      };
 
-      if (query.grade) {
-        where.grade = query.grade;
-      }
+      // Preparar paginação
+      const pagination = {
+        page: query.page,
+        limit: Math.min(query.limit, 50), // Máximo 50 por página
+        sortBy: query.sortBy,
+        sortOrder: query.sortOrder
+      };
 
-      if (query.materialType) {
-        where.materialType = query.materialType;
-      }
-
-      if (query.difficulty) {
-        where.difficulty = query.difficulty;
-      }
-
-      // Filtros avançados
-      if (query.author) {
-        where.OR = [
-          {
-            author: {
-              name: {
-                contains: query.author,
-                mode: 'insensitive'
-              }
-            }
-          },
-          {
-            authorId: query.author
-          }
-        ];
-      }
-
-      // Filtros por avaliação
-      if (query.minRating !== undefined) {
-        where.avgRating = {
-          ...where.avgRating,
-          gte: query.minRating
-        };
-      }
-
-      if (query.maxRating !== undefined) {
-        where.avgRating = {
-          ...where.avgRating,
-          lte: query.maxRating
-        };
-      }
-
-
-      // Filtros por data
-      if (query.dateFrom) {
-        where.createdAt = {
-          ...where.createdAt,
-          gte: new Date(query.dateFrom)
-        };
-      }
-
-      if (query.dateTo) {
-        where.createdAt = {
-          ...where.createdAt,
-          lte: new Date(query.dateTo + 'T23:59:59.999Z')
-        };
-      }
-
-      // Busca textual avançada
-      if (query.search) {
-        where.OR = [
-          {
-            title: {
-              contains: query.search,
-              mode: 'insensitive'
-            }
-          },
-          {
-            description: {
-              contains: query.search,
-              mode: 'insensitive'
-            }
-          },
-          {
-            discipline: {
-              contains: query.search,
-              mode: 'insensitive'
-            }
-          },
-          {
-            subTopic: {
-              contains: query.search,
-              mode: 'insensitive'
-            }
-          },
-          {
-            author: {
-              name: {
-                contains: query.search,
-                mode: 'insensitive'
-              }
-            }
-          }
-        ];
-      }
-
-
-      // Filtros especiais
-      if (query.hasFile) {
-        where.fileUrl = {
-          not: null
-        };
-      }
-
-      if (query.featured) {
-        where.avgRating = {
-          ...where.avgRating,
-          gte: 4.0
-        };
-        where.totalRatings = {
-          gte: 3
-        };
-      }
-
-      // Configurar ordenação
-      const orderBy: any = {};
-      orderBy[query.sortBy] = query.sortOrder;
-
-      // Validar limite de paginação
-      const limit = Math.min(query.limit, 50); // Máximo 50 por página
-
-      // Buscar materiais com paginação otimizada
-      const [materials, total, stats] = await Promise.all([
-        prisma.material.findMany({
-          where,
-          include: {
-            author: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-                school: true
-              }
-            },
-            _count: {
-              select: {
-                ratings: true
-              }
-            }
-          },
-          orderBy,
-          skip: (query.page - 1) * limit,
-          take: limit
-        }),
-        prisma.material.count({ where }),
-        // Estatísticas adicionais
-        prisma.material.aggregate({
-          where,
-          _avg: {
-            avgRating: true,
-            downloadCount: true
-          },
-          _max: {
-            avgRating: true,
-            downloadCount: true
-          },
-          _min: {
-            avgRating: true,
-            downloadCount: true
-          }
-        })
-      ]);
-
-      const totalPages = Math.ceil(total / limit);
+      // Buscar materiais usando repository
+      const result = await materialRepository.findMany(filters, pagination);
 
       // Enriquecer dados dos materiais
-      const enrichedMaterials = materials.map(material => ({
+      const enrichedMaterials = result.materials.map(material => ({
         ...material,
         isNew: new Date().getTime() - new Date(material.createdAt).getTime() < 7 * 24 * 60 * 60 * 1000, // Novo se menos de 7 dias
-        isPopular: material.downloadCount > (stats._avg.downloadCount || 0),
+        isPopular: material.downloadCount > 10,
         isHighRated: material.avgRating >= 4.0 && material.totalRatings >= 3
       }));
 
@@ -301,39 +127,19 @@ export class MaterialController {
         data: {
           materials: enrichedMaterials,
           pagination: {
-            current: query.page,
-            total: totalPages,
-            count: total,
-            limit: limit,
-            hasNext: query.page < totalPages,
-            hasPrev: query.page > 1
+            current: result.page,
+            total: result.totalPages,
+            count: result.total,
+            limit: result.limit,
+            hasNext: result.page < result.totalPages,
+            hasPrev: result.page > 1
           },
           filters: {
-            applied: {
-              discipline: query.discipline,
-              grade: query.grade,
-              materialType: query.materialType,
-              difficulty: query.difficulty,
-              author: query.author,
-              minRating: query.minRating,
-              maxRating: query.maxRating,
-              dateFrom: query.dateFrom,
-              dateTo: query.dateTo,
-              search: query.search,
-              hasFile: query.hasFile,
-              featured: query.featured
-            },
+            applied: filters,
             sorting: {
               sortBy: query.sortBy,
               sortOrder: query.sortOrder
             }
-          },
-          stats: {
-            totalMaterials: total,
-            avgRating: stats._avg.avgRating || 0,
-            avgDownloads: stats._avg.downloadCount || 0,
-            maxRating: stats._max.avgRating || 0,
-            maxDownloads: stats._max.downloadCount || 0
           }
         }
       });
@@ -360,32 +166,7 @@ export class MaterialController {
     try {
       const { id } = req.params;
 
-      const material = await prisma.material.findUnique({
-        where: { id },
-        include: {
-          author: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              school: true
-            }
-          },
-          ratings: {
-            include: {
-              user: {
-                select: {
-                  id: true,
-                  name: true
-                }
-              }
-            },
-            orderBy: {
-              createdAt: 'desc'
-            }
-          }
-        }
-      });
+      const material = await materialRepository.findById(id);
 
       if (!material) {
         return res.status(404).json({
@@ -415,9 +196,7 @@ export class MaterialController {
       const validatedData = updateMaterialSchema.parse(req.body);
 
       // Verificar se material existe e se usuário é o autor
-      const existingMaterial = await prisma.material.findUnique({
-        where: { id }
-      });
+      const existingMaterial = await materialRepository.findById(id);
 
       if (!existingMaterial) {
         return res.status(404).json({
@@ -433,21 +212,8 @@ export class MaterialController {
         });
       }
 
-      // Atualizar material
-      const updatedMaterial = await prisma.material.update({
-        where: { id },
-        data: validatedData,
-        include: {
-          author: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              school: true
-            }
-          }
-        }
-      });
+      // Atualizar material usando repository
+      const updatedMaterial = await materialRepository.update(id, validatedData);
 
       res.json({
         success: true,
@@ -478,9 +244,7 @@ export class MaterialController {
       const { id } = req.params;
 
       // Verificar se material existe e se usuário é o autor
-      const existingMaterial = await prisma.material.findUnique({
-        where: { id }
-      });
+      const existingMaterial = await materialRepository.findById(id);
 
       if (!existingMaterial) {
         return res.status(404).json({
@@ -496,10 +260,8 @@ export class MaterialController {
         });
       }
 
-      // Deletar material e arquivo
-      await prisma.material.delete({
-        where: { id }
-      });
+      // Deletar material usando repository
+      await materialRepository.delete(id);
 
       // Deletar arquivo físico se existir
       if (existingMaterial.fileUrl) {
@@ -510,14 +272,7 @@ export class MaterialController {
       }
 
       // Decrementar contador de materiais do usuário
-      await prisma.user.update({
-        where: { id: req.user!.id },
-        data: {
-          materialsCount: {
-            decrement: 1
-          }
-        }
-      });
+      await userRepository.decrementMaterialsCount(req.user!.id);
 
       res.json({
         success: true,
@@ -538,9 +293,7 @@ export class MaterialController {
     try {
       const { id } = req.params;
 
-      const material = await prisma.material.findUnique({
-        where: { id }
-      });
+      const material = await materialRepository.findById(id);
 
       if (!material) {
         return res.status(404).json({
@@ -556,15 +309,8 @@ export class MaterialController {
         });
       }
 
-      // Incrementar contador de download
-      await prisma.material.update({
-        where: { id },
-        data: {
-          downloadCount: {
-            increment: 1
-          }
-        }
-      });
+      // Incrementar contador de download usando repository
+      await materialRepository.incrementDownloadCount(id);
 
       res.json({
         success: true,
@@ -590,9 +336,7 @@ export class MaterialController {
       const validatedData = createRatingSchema.parse(req.body);
 
       // Verificar se material existe
-      const material = await prisma.material.findUnique({
-        where: { id }
-      });
+      const material = await materialRepository.findById(id);
 
       if (!material) {
         return res.status(404).json({
@@ -601,70 +345,18 @@ export class MaterialController {
         });
       }
 
-      // Verificar se usuário já avaliou
-      const existingRating = await prisma.rating.findUnique({
-        where: {
-          materialId_userId: {
-            materialId: id,
-            userId: req.user!.id
-          }
-        }
-      });
-
-      let rating;
-      if (existingRating) {
-        // Atualizar avaliação existente
-        rating = await prisma.rating.update({
-          where: { id: existingRating.id },
-          data: validatedData,
-          include: {
-            user: {
-              select: {
-                id: true,
-                name: true
-              }
-            }
-          }
-        });
-      } else {
-        // Criar nova avaliação
-        rating = await prisma.rating.create({
-          data: {
-            ...validatedData,
-            materialId: id,
-            userId: req.user!.id
-          },
-          include: {
-            user: {
-              select: {
-                id: true,
-                name: true
-              }
-            }
-          }
-        });
-      }
-
-      // Recalcular média de avaliações
-      const ratings = await prisma.rating.findMany({
-        where: { materialId: id }
-      });
-
-      const avgRating = ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length;
-
-      // Atualizar material com nova média
-      await prisma.material.update({
-        where: { id },
-        data: {
-          avgRating,
-          totalRatings: ratings.length
-        }
-      });
+      // Criar/atualizar avaliação usando repository
+      const rating = await materialRepository.upsertRating(
+        id,
+        req.user!.id,
+        validatedData.rating,
+        validatedData.comment
+      );
 
       res.json({
         success: true,
         data: rating,
-        message: existingRating ? 'Avaliação atualizada com sucesso' : 'Avaliação criada com sucesso'
+        message: 'Avaliação registrada com sucesso'
       });
 
     } catch (error: any) {
@@ -689,54 +381,23 @@ export class MaterialController {
     try {
       const query = getMaterialsQuerySchema.parse(req.query);
 
-      const where: any = {
-        authorId: req.user!.id
+      const pagination = {
+        page: query.page,
+        limit: query.limit
       };
 
-      // Aplicar filtros se fornecidos
-      if (query.search) {
-        where.OR = [
-          {
-            title: {
-              contains: query.search,
-              mode: 'insensitive'
-            }
-          },
-          {
-            description: {
-              contains: query.search,
-              mode: 'insensitive'
-            }
-          }
-        ];
-      }
-
-      const [materials, total] = await Promise.all([
-        prisma.material.findMany({
-          where,
-          include: {
-            ratings: true
-          },
-          orderBy: {
-            createdAt: 'desc'
-          },
-          skip: (query.page - 1) * query.limit,
-          take: query.limit
-        }),
-        prisma.material.count({ where })
-      ]);
-
-      const totalPages = Math.ceil(total / query.limit);
+      // Buscar materiais do usuário usando repository
+      const result = await materialRepository.findByAuthor(req.user!.id, pagination);
 
       res.json({
         success: true,
         data: {
-          materials,
+          materials: result.materials,
           pagination: {
-            current: query.page,
-            total: totalPages,
-            count: total,
-            limit: query.limit
+            current: result.page,
+            total: result.totalPages,
+            count: result.total,
+            limit: result.limit
           }
         }
       });
@@ -753,146 +414,11 @@ export class MaterialController {
   // Obter estatísticas gerais dos materiais
   async getStats(req: Request, res: Response) {
     try {
-      const [
-        totalMaterials,
-        totalDownloads,
-        totalRatings,
-        avgRating,
-        materialsByType,
-        materialsByDifficulty,
-        materialsByGrade,
-        topAuthors,
-        recentMaterials,
-        popularMaterials
-      ] = await Promise.all([
-        // Total de materiais
-        prisma.material.count(),
-        
-        // Total de downloads
-        prisma.material.aggregate({
-          _sum: { downloadCount: true }
-        }),
-        
-        // Total de avaliações
-        prisma.rating.count(),
-        
-        // Média geral de avaliações
-        prisma.material.aggregate({
-          _avg: { avgRating: true }
-        }),
-        
-        // Materiais por tipo
-        prisma.material.groupBy({
-          by: ['materialType'],
-          _count: { materialType: true },
-          orderBy: { _count: { materialType: 'desc' } }
-        }),
-        
-        // Materiais por dificuldade
-        prisma.material.groupBy({
-          by: ['difficulty'],
-          _count: { difficulty: true },
-          orderBy: { _count: { difficulty: 'desc' } }
-        }),
-        
-        // Materiais por série
-        prisma.material.groupBy({
-          by: ['grade'],
-          _count: { grade: true },
-          orderBy: { _count: { grade: 'desc' } },
-          take: 10
-        }),
-        
-        // Top autores
-        prisma.user.findMany({
-          select: {
-            id: true,
-            name: true,
-            school: true,
-            materialsCount: true,
-            materials: {
-              select: {
-                avgRating: true,
-                downloadCount: true
-              }
-            }
-          },
-          orderBy: { materialsCount: 'desc' },
-          take: 10
-        }),
-        
-        // Materiais recentes (últimos 7 dias)
-        prisma.material.count({
-          where: {
-            createdAt: {
-              gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
-            }
-          }
-        }),
-        
-        // Materiais mais populares
-        prisma.material.findMany({
-          select: {
-            id: true,
-            title: true,
-            downloadCount: true,
-            avgRating: true,
-            totalRatings: true,
-            author: {
-              select: {
-                name: true
-              }
-            }
-          },
-          orderBy: { downloadCount: 'desc' },
-          take: 5
-        })
-      ]);
-
-      // Calcular estatísticas dos top autores
-      const enrichedAuthors = topAuthors.map(author => {
-        const totalDownloads = author.materials.reduce((sum, material) => sum + material.downloadCount, 0);
-        const avgAuthorRating = author.materials.length > 0 
-          ? author.materials.reduce((sum, material) => sum + material.avgRating, 0) / author.materials.length 
-          : 0;
-        
-        return {
-          id: author.id,
-          name: author.name,
-          school: author.school,
-          materialsCount: author.materialsCount,
-          totalDownloads,
-          avgRating: avgAuthorRating
-        };
-      });
+      const stats = await materialRepository.getStats();
 
       res.json({
         success: true,
-        data: {
-          overview: {
-            totalMaterials,
-            totalDownloads: totalDownloads._sum.downloadCount || 0,
-            totalRatings,
-            avgRating: avgRating._avg.avgRating || 0,
-            recentMaterials
-          },
-          distribution: {
-            byType: materialsByType.map(item => ({
-              type: item.materialType,
-              count: item._count.materialType
-            })),
-            byDifficulty: materialsByDifficulty.map(item => ({
-              difficulty: item.difficulty,
-              count: item._count.difficulty
-            })),
-            byGrade: materialsByGrade.map(item => ({
-              grade: item.grade,
-              count: item._count.grade
-            }))
-          },
-          topAuthors: enrichedAuthors,
-          popularMaterials
-        }
+        data: stats
       });
 
     } catch (error) {
@@ -910,65 +436,19 @@ export class MaterialController {
       const { id } = req.params;
       const limit = parseInt(req.query.limit as string) || 5;
 
-      // Buscar material original
-      const originalMaterial = await prisma.material.findUnique({
-        where: { id },
-        select: {
-          discipline: true,
-          grade: true,
-          materialType: true,
-          difficulty: true,
-        }
-      });
+      // Buscar materiais similares usando repository
+      const similarMaterials = await materialRepository.findSimilar(id, limit);
 
-      if (!originalMaterial) {
+      if (similarMaterials.length === 0) {
         return res.status(404).json({
           success: false,
-          error: 'Material não encontrado'
+          error: 'Material não encontrado ou não há materiais similares'
         });
       }
-
-      // Buscar materiais similares
-      const similarMaterials = await prisma.material.findMany({
-        where: {
-          AND: [
-            { id: { not: id } }, // Excluir o material original
-            {
-              OR: [
-                { discipline: originalMaterial.discipline },
-                { grade: originalMaterial.grade },
-                { materialType: originalMaterial.materialType },
-                { difficulty: originalMaterial.difficulty },
-              ]
-            }
-          ]
-        },
-        include: {
-          author: {
-            select: {
-              id: true,
-              name: true,
-              school: true
-            }
-          }
-        },
-        orderBy: [
-          { avgRating: 'desc' },
-          { downloadCount: 'desc' }
-        ],
-        take: limit
-      });
 
       res.json({
         success: true,
         data: {
-          original: {
-            id,
-            discipline: originalMaterial.discipline,
-            grade: originalMaterial.grade,
-            materialType: originalMaterial.materialType,
-            difficulty: originalMaterial.difficulty,
-          },
           similar: similarMaterials
         }
       });
@@ -989,22 +469,8 @@ export class MaterialController {
 
       console.log('🤖 Gerando plano de aula e atividades com IA para material:', id);
 
-      // Buscar material
-      const material = await prisma.material.findUnique({
-        where: { id },
-        select: {
-          id: true,
-          title: true,
-          description: true,
-          discipline: true,
-          grade: true,
-          materialType: true,
-          difficulty: true,
-          fileUrl: true,
-          fileName: true,
-          authorId: true,
-        }
-      });
+      // Buscar material usando repository
+      const material = await materialRepository.findById(id);
 
       if (!material) {
         return res.status(404).json({

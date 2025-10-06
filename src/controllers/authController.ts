@@ -1,24 +1,25 @@
 import { Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import prisma from '../database';
 import { AuthenticatedRequest, JWTPayload } from '../types/auth';
-import { 
-  registerSchema, 
-  loginSchema, 
-  updateProfileSchema, 
-  changePasswordSchema 
+import {
+  registerSchema,
+  loginSchema,
+  updateProfileSchema,
+  changePasswordSchema
 } from '../validators/authValidator';
-import { 
-  ResponseHelper, 
-  AppError, 
-  catchAsync 
+import {
+  ResponseHelper,
+  AppError,
+  catchAsync
 } from '../utils/errorHandler';
 import env from '../config/env';
+import { userRepository } from '../repositories/userRepository';
+import prisma from '../database';
 
 // Configurações de segurança
 const SALT_ROUNDS = 12;
-const JWT_EXPIRES_IN = '24h'; // 24 horas conforme solicitado
+const JWT_EXPIRES_IN = '24h';
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOCKOUT_TIME = 15 * 60 * 1000; // 15 minutos
 
@@ -37,7 +38,7 @@ const hashPassword = async (password: string): Promise<string> => {
   if (password.length < 6) {
     throw new AppError('Senha deve ter pelo menos 6 caracteres', 400);
   }
-  
+
   return await bcrypt.hash(password, SALT_ROUNDS);
 };
 
@@ -47,10 +48,8 @@ export const register = catchAsync(async (req: any, res: Response) => {
   const validatedData = registerSchema.parse(req.body);
   const { name, email, password, school } = validatedData;
 
-  // Verificar se o email já existe
-  const existingUser = await prisma.user.findUnique({
-    where: { email }
-  });
+  // Verificar se o email já existe usando repository
+  const existingUser = await userRepository.findByEmail(email);
 
   if (existingUser) {
     throw new AppError('Este email já está cadastrado', 409);
@@ -59,21 +58,12 @@ export const register = catchAsync(async (req: any, res: Response) => {
   // Hash da senha
   const hashedPassword = await hashPassword(password);
 
-  // Criar usuário
-  const user = await prisma.user.create({
-    data: {
-      name,
-      email,
-      password: hashedPassword,
-      school: school || null,
-    },
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      school: true,
-      createdAt: true
-    }
+  // Criar usuário usando repository
+  const user = await userRepository.create({
+    name,
+    email,
+    password: hashedPassword,
+    school: school || null,
   });
 
   // Gerar token JWT
@@ -111,18 +101,9 @@ export const login = catchAsync(async (req: any, res: Response) => {
   const validatedData = loginSchema.parse(req.body);
   const { email, password } = validatedData;
 
-  // Buscar usuário com dados de segurança
-  const user = await prisma.user.findUnique({
-    where: { email },
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      password: true,
-      school: true,
-      createdAt: true
-    }
-  });
+  // Buscar usuário com dados de segurança usando repository
+  // Note: userRepository.findByEmail retorna todos os campos incluindo password
+  const user = await userRepository.findByEmail(email);
 
   if (!user) {
     // Log de tentativa de login inválida
@@ -132,7 +113,7 @@ export const login = catchAsync(async (req: any, res: Response) => {
 
   // Verificar senha
   const isValidPassword = await bcrypt.compare(password, user.password);
-  
+
   if (!isValidPassword) {
     // Log de tentativa de senha incorreta
     console.warn(`❌ Tentativa de login com senha incorreta: ${email}`);
@@ -176,6 +157,8 @@ export const getProfile = catchAsync(async (req: AuthenticatedRequest, res: Resp
     throw new AppError('Usuário não autenticado', 401);
   }
 
+  // Buscar usuário usando repository (mas ainda precisa do Prisma para incluir materials)
+  // Como userRepository.findById não inclui materials, precisamos usar Prisma aqui
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
@@ -212,7 +195,7 @@ export const getProfile = catchAsync(async (req: AuthenticatedRequest, res: Resp
 // Atualizar perfil do usuário
 export const updateProfile = catchAsync(async (req: AuthenticatedRequest, res: Response) => {
   const userId = req.user?.id;
-  
+
   if (!userId) {
     throw new AppError('Usuário não autenticado', 401);
   }
@@ -225,7 +208,7 @@ export const updateProfile = catchAsync(async (req: AuthenticatedRequest, res: R
   if (validatedData.name !== undefined) {
     updateData.name = validatedData.name;
   }
-  
+
   if (validatedData.school !== undefined) {
     updateData.school = validatedData.school;
   }
@@ -235,18 +218,8 @@ export const updateProfile = catchAsync(async (req: AuthenticatedRequest, res: R
     throw new AppError('Nenhum dado fornecido para atualização', 400);
   }
 
-  const user = await prisma.user.update({
-    where: { id: userId },
-    data: updateData,
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      school: true,
-      materialsCount: true,
-      createdAt: true
-    }
-  });
+  // Atualizar usuário usando repository
+  const user = await userRepository.update(userId, updateData);
 
   // Log de atualização
   console.log(`✅ Perfil atualizado: ${user.email} (ID: ${userId})`);
@@ -257,7 +230,7 @@ export const updateProfile = catchAsync(async (req: AuthenticatedRequest, res: R
 // Alterar senha
 export const changePassword = catchAsync(async (req: AuthenticatedRequest, res: Response) => {
   const userId = req.user?.id;
-  
+
   if (!userId) {
     throw new AppError('Usuário não autenticado', 401);
   }
@@ -266,26 +239,34 @@ export const changePassword = catchAsync(async (req: AuthenticatedRequest, res: 
   const validatedData = changePasswordSchema.parse(req.body);
   const { currentPassword, newPassword } = validatedData;
 
-  // Buscar usuário atual
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { id: true, email: true, password: true }
-  });
+  // Buscar usuário atual usando repository
+  // Note: userRepository.findByEmail retorna password field
+  const user = await userRepository.findById(userId);
 
   if (!user) {
     throw new AppError('Usuário não encontrado', 404);
   }
 
+  // Precisamos buscar o password usando Prisma pois userRepository.findById não retorna password
+  const userWithPassword = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, email: true, password: true }
+  });
+
+  if (!userWithPassword) {
+    throw new AppError('Usuário não encontrado', 404);
+  }
+
   // Verificar senha atual
-  const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password);
-  
+  const isCurrentPasswordValid = await bcrypt.compare(currentPassword, userWithPassword.password);
+
   if (!isCurrentPasswordValid) {
     throw new AppError('Senha atual incorreta', 400);
   }
 
   // Verificar se a nova senha é diferente da atual
-  const isSamePassword = await bcrypt.compare(newPassword, user.password);
-  
+  const isSamePassword = await bcrypt.compare(newPassword, userWithPassword.password);
+
   if (isSamePassword) {
     throw new AppError('A nova senha deve ser diferente da atual', 400);
   }
@@ -293,14 +274,11 @@ export const changePassword = catchAsync(async (req: AuthenticatedRequest, res: 
   // Hash da nova senha
   const hashedNewPassword = await hashPassword(newPassword);
 
-  // Atualizar senha
-  await prisma.user.update({
-    where: { id: userId },
-    data: { password: hashedNewPassword }
-  });
+  // Atualizar senha usando repository
+  await userRepository.updatePassword(userId, hashedNewPassword);
 
   // Log de segurança
-  console.log(`🔐 Senha alterada: ${user.email} (ID: ${userId})`);
+  console.log(`🔐 Senha alterada: ${userWithPassword.email} (ID: ${userId})`);
 
   return ResponseHelper.success(res, 'Senha alterada com sucesso');
 });
