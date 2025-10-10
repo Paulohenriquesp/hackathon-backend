@@ -19,9 +19,6 @@ export const authenticateToken = async (
     // Se não houver token no header, verificar nos cookies
     if (!token && req.cookies) {
       token = req.cookies.auth_token;
-      console.log('🔍 Auth Token: Token encontrado em cookie:', token ? 'presente' : 'ausente');
-    } else {
-      console.log('🔍 Auth Token: Header Authorization:', authHeader ? 'presente' : 'ausente');
     }
 
     if (!token) {

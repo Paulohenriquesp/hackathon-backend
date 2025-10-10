@@ -7,8 +7,6 @@ if (!env.OPENAI_API_KEY) {
   throw new Error('OPENAI_API_KEY não configurada');
 }
 
-console.log('✅ OpenAI API Key carregada:', env.OPENAI_API_KEY.substring(0, 20) + '...');
-
 // Inicializar cliente OpenAI
 const openai = new OpenAI({
   apiKey: env.OPENAI_API_KEY,
@@ -80,12 +78,6 @@ export class AIService {
     difficulty: string
   ): Promise<GeneratedContent> {
     try {
-      console.log('🤖 AIService: Iniciando geração de conteúdo completo...');
-      console.log('📚 Material:', materialTitle);
-      console.log('📖 Disciplina:', discipline);
-      console.log('🎓 Série:', grade);
-      console.log('⚡ Dificuldade:', difficulty);
-
       // Limitar conteúdo para evitar exceder limite de tokens
       const truncatedContent = materialContent.substring(0, 8000);
 
@@ -124,19 +116,11 @@ export class AIService {
         throw new Error('OpenAI retornou resposta vazia');
       }
 
-      console.log('✅ AIService: Resposta recebida da OpenAI');
-
       // Parsear JSON
       const content: GeneratedContent = JSON.parse(contentResponse);
 
       // Validar estrutura da resposta
       this.validateContentStructure(content);
-
-      console.log('✅ AIService: Conteúdo completo gerado com sucesso');
-      console.log(`📋 Plano de aula: ${content.lesson_plan.stages.length} etapas`);
-      console.log(`📝 Atividades: ${content.activities.exercises.length} exercícios`);
-      console.log(`❓ Questões múltipla escolha: ${content.activities.multiple_choice.length}`);
-      console.log(`✍️ Questões dissertativas: ${content.activities.essay_questions.length}`);
 
       return content;
 
@@ -178,11 +162,6 @@ export class AIService {
     materialType: string
   ): Promise<GeneratedActivities> {
     try {
-      console.log('🤖 AIService: Iniciando geração de atividades...');
-      console.log('📚 Material:', materialTitle);
-      console.log('📖 Disciplina:', discipline);
-      console.log('🎓 Série:', grade);
-
       // Limitar conteúdo para evitar exceder limite de tokens
       const truncatedContent = materialContent.substring(0, 8000);
 
@@ -220,18 +199,11 @@ export class AIService {
         throw new Error('OpenAI retornou resposta vazia');
       }
 
-      console.log('✅ AIService: Resposta recebida da OpenAI');
-
       // Parsear JSON
       const activities: GeneratedActivities = JSON.parse(contentResponse);
 
       // Validar estrutura da resposta
       this.validateActivitiesStructure(activities);
-
-      console.log('✅ AIService: Atividades geradas com sucesso');
-      console.log(`📝 ${activities.exercises.length} exercícios`);
-      console.log(`❓ ${activities.multiple_choice.length} questões de múltipla escolha`);
-      console.log(`✍️ ${activities.essay_questions.length} questões dissertativas`);
 
       return activities;
 

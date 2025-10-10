@@ -31,6 +31,7 @@ npm run docker:up
 # 4. Configurar banco de dados
 npm run db:push      # Aplicar schema do Prisma
 npm run db:generate  # Gerar cliente Prisma (OBRIGATÓRIO!)
+npm run build        # Gerar build (OBRIGATÓRIO)
 
 # 5. Executar servidor em desenvolvimento
 npm run dev

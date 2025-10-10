@@ -39,20 +39,13 @@ export const authenticate = catchAsync(async (
   res: Response,
   next: NextFunction
 ) => {
-  console.log('🔍 Auth Middleware: Requisição recebida para:', req.method, req.path);
-  console.log('🔍 Auth Middleware: Cookies completos:', req.cookies);
-  console.log('🔍 Auth Middleware: Headers completos:', req.headers);
-
   // Extrair token do cookie HttpOnly
   const token = req.cookies?.auth_token;
 
   if (!token) {
     console.error('❌ Auth Middleware: Token de acesso não encontrado no cookie');
-    console.error('❌ Cookies recebidos:', JSON.stringify(req.cookies));
     throw new AppError('Token de acesso necessário. Faça login novamente.', 401);
   }
-
-  console.log('✅ Auth Middleware: Token encontrado no cookie!');
 
   try {
     // Verificar e decodificar o JWT
@@ -166,7 +159,6 @@ export const optionalAuthenticate = catchAsync(async (
     }
   } catch (error) {
     // Em autenticação opcional, ignoramos erros e continuamos sem usuário
-    console.log('Token opcional inválido, continuando sem autenticação');
   }
 
   next();

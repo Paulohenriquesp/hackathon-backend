@@ -12,9 +12,6 @@ export class MaterialController {
   // Criar material com upload
   async createMaterial(req: AuthenticatedRequest, res: Response) {
     try {
-      console.log('🔍 Backend: Dados recebidos:', req.body);
-      console.log('🔍 Backend: Arquivo recebido:', req.file ? req.file.originalname : 'Nenhum arquivo');
-
       // Validar dados recebidos
       const validatedData = createMaterialSchema.parse(req.body);
 
@@ -467,8 +464,6 @@ export class MaterialController {
     try {
       const { id } = req.params;
 
-      console.log('🤖 Gerando plano de aula e atividades com IA para material:', id);
-
       // Buscar material usando repository
       const material = await materialRepository.findById(id);
 
@@ -494,14 +489,12 @@ export class MaterialController {
           if (pdfService.supportsTextExtraction(material.fileName)) {
             try {
               materialContent = await pdfService.extractTextFromFile(filePath);
-              console.log('✅ Texto extraído do arquivo:', materialContent.length, 'caracteres');
             } catch (extractError: any) {
               console.warn('⚠️ Não foi possível extrair texto do arquivo:', extractError.message);
               // Continuar com descrição se extração falhar
               materialContent = material.description;
             }
           } else {
-            console.log('ℹ️ Arquivo não suporta extração de texto, usando descrição');
             materialContent = material.description;
           }
         }
@@ -527,8 +520,6 @@ export class MaterialController {
         material.materialType,
         material.difficulty
       );
-
-      console.log('✅ Plano de aula e atividades geradas com sucesso');
 
       res.json({
         success: true,

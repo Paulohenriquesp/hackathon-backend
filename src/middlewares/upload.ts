@@ -48,10 +48,6 @@ const storage = multer.diskStorage({
 
 // Filtro de arquivos
 const fileFilter = (req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
-  console.log('🔍 Upload Filter: Verificando arquivo:', file.originalname);
-  console.log('🔍 Upload Filter: MIME type:', file.mimetype);
-  console.log('🔍 Upload Filter: Req.body:', req.body);
-  
   // Verificar MIME type
   if (!allowedMimeTypes.includes(file.mimetype)) {
     console.error('❌ Upload Filter: MIME type não permitido:', file.mimetype);
@@ -60,14 +56,12 @@ const fileFilter = (req: Request, file: Express.Multer.File, cb: multer.FileFilt
 
   // Verificar extensão
   const extension = path.extname(file.originalname).toLowerCase();
-  console.log('🔍 Upload Filter: Extensão:', extension);
-  
+
   if (!allowedExtensions.includes(extension)) {
     console.error('❌ Upload Filter: Extensão não permitida:', extension);
     return cb(new Error(`Extensão de arquivo não permitida: ${extension}`));
   }
 
-  console.log('✅ Upload Filter: Arquivo aprovado');
   cb(null, true);
 };
 
@@ -97,18 +91,12 @@ export const deleteFile = (filename: string): void => {
 
 // Middleware para validar arquivo após upload
 export const validateUploadedFile = (req: Request, res: any, next: any) => {
-  console.log('🔍 Upload Validation: Validando arquivo...');
-  console.log('🔍 Upload Validation: req.file presente:', !!req.file);
-  
   if (!req.file) {
-    console.error('❌ Upload Validation: Nenhum arquivo enviado');
     return res.status(400).json({
       success: false,
       error: 'Nenhum arquivo foi enviado'
     });
   }
-  
-  console.log('✅ Upload Validation: Arquivo recebido:', req.file.originalname);
 
   // Verificar se o arquivo foi salvo corretamente
   const filePath = path.join(uploadsDir, req.file.filename);

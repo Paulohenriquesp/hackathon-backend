@@ -8,8 +8,6 @@ export class PDFService {
    */
   async extractTextFromPDF(filePath: string): Promise<string> {
     try {
-      console.log('📄 PDFService: Extraindo texto do PDF:', filePath);
-
       // Verificar se arquivo existe
       if (!fs.existsSync(filePath)) {
         throw new Error('Arquivo PDF não encontrado');
@@ -20,10 +18,6 @@ export class PDFService {
 
       // Extrair texto usando pdf-parse
       const data = await pdf(dataBuffer);
-
-      console.log('✅ PDFService: Texto extraído com sucesso');
-      console.log(`📊 Total de páginas: ${data.numpages}`);
-      console.log(`📏 Total de caracteres: ${data.text.length}`);
 
       // Limpar texto extraído
       const cleanedText = this.cleanExtractedText(data.text);
@@ -67,7 +61,6 @@ export class PDFService {
 
     // Arquivos de texto simples
     if (extension === '.txt' || mimeType === 'text/plain') {
-      console.log('📄 PDFService: Lendo arquivo de texto:', filePath);
       const content = fs.readFileSync(filePath, 'utf-8');
       return this.cleanExtractedText(content);
     }

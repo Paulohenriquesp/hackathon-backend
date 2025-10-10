@@ -86,7 +86,6 @@ export const register = catchAsync(async (req: any, res: Response) => {
 
   // NÃO retornar o token no body - apenas no cookie HttpOnly
   // Token é enviado automaticamente via cookie, não no response body
-  console.log('✅ AuthController register: Retornando apenas user (token no cookie)');
   return ResponseHelper.success(
     res,
     'Professor cadastrado com sucesso',
