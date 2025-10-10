@@ -11,7 +11,6 @@ export const authenticateToken = async (
   next: NextFunction
 ) => {
   try {
-    console.log('🔍 Auth Token: Requisição recebida para:', req.method, req.path);
 
     // Verificar primeiro no header Authorization
     const authHeader = req.headers['authorization'];
